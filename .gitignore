@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+bridge/node_modules/
+
+# Build outputs
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Sidecar binaries (built locally)
+src-tauri/binaries/
+
+# Tauri debug artifacts
+src-tauri/WixTools/
+
+# Environment
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

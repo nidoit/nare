@@ -1,0 +1,23 @@
+{
+  "name": "nare-bridge",
+  "version": "0.1.0",
+  "description": "NARE WhatsApp bridge using Baileys",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "pkg index.js --targets node18-linux-x64 --output ../src-tauri/binaries/nare-bridge-x86_64-unknown-linux-gnu"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": ["node_modules/@whiskeysockets/baileys/**/*"],
+    "targets": ["node18-linux-x64"]
+  }
+}
