@@ -29,7 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [],
+    "icon": ["icons/icon.png"],
     "externalBin": ["binaries/nare-bridge"]
   }
 }

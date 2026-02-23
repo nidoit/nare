@@ -65,11 +65,23 @@ check_dep() {
     fi
 }
 
+check_pkg() {
+    if ! pkg-config --exists "$1" 2>/dev/null; then
+        echo "error: system library '$1' is required but not found" >&2
+        echo "  install: $2" >&2
+        exit 1
+    fi
+}
+
 echo "==> Checking dependencies..."
-check_dep node    "sudo pacman -S nodejs"
-check_dep npm     "sudo pacman -S npm"
-check_dep rustc   "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-check_dep cargo   "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+check_dep node      "sudo pacman -S nodejs"
+check_dep npm       "sudo pacman -S npm"
+check_dep rustc     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+check_dep cargo     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+check_dep pkg-config "sudo pacman -S pkgconf"
+check_pkg gtk+-3.0          "sudo pacman -S gtk3"
+check_pkg webkit2gtk-4.1    "sudo pacman -S webkit2gtk-4.1"
+check_pkg gdk-3.0           "sudo pacman -S gtk3"
 
 # ── Install npm dependencies ─────────────────────────────────────────────────
 
