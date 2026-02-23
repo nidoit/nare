@@ -1,0 +1,27 @@
+{
+  "name": "nare",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "build:bridge": "cd bridge && npm install && pkg index.js --targets node18-linux-x64 --output ../src-tauri/binaries/nare-bridge-x86_64-unknown-linux-gnu && chmod +x ../src-tauri/binaries/nare-bridge-x86_64-unknown-linux-gnu"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-shell": "^2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.8"
+  }
+}

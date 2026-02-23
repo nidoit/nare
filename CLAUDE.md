@@ -9,16 +9,16 @@
 
 **NARE** is one of three differentiating features of the Blunux Linux distribution (Arch-based). It enables users to manage their Linux system through natural language via WhatsApp messages, backed by Claude or DeepSeek AI.
 
-- **Binary name:** `blunux-ai`
-- **Crate name:** `ai-agent`
-- **Version:** 1.0.0
+- **App type:** Tauri 2 desktop app (Rust backend + React/TypeScript frontend)
+- **Tauri crate:** `nare` (`src-tauri/`)
+- **Version:** 0.1.0
 - **Author:** Jaewoo Joung (정재우)
 - **License:** MIT
 - **Parent project:** [blunux2SB](https://github.com/nidoit/blunux2SB)
 
 ### Repository Status
 
-This repository (`nidoit/nare`) currently contains **design documentation only**. The full spec is in `PRD.md` (product requirements) and `TDD.md` (technical design). No source code has been committed yet — implementation goes into the `blunux2SB` monorepo as a new Rust crate.
+This repository contains both **design documentation** (PRD.md, TDD.md) and the **Tauri desktop app implementation** (`src/`, `src-tauri/`, `bridge/`). The app is currently at v0.1.0 — setup wizard only (Claude OAuth + WhatsApp QR login).
 
 ---
 
@@ -26,50 +26,190 @@ This repository (`nidoit/nare`) currently contains **design documentation only**
 
 ```
 nare/
-├── CLAUDE.md         # This file
-├── readme.md         # One-line project header
-├── PRD.md            # Product Requirements Document (841 lines, Korean/English)
-└── TDD.md            # Technical Design Document (1191 lines)
+├── CLAUDE.md               # This file
+├── readme.md               # Project header
+├── PRD.md                  # Product Requirements Document (Korean/English)
+├── TDD.md                  # Technical Design Document
+│
+├── package.json            # npm: Vite + React + Tauri CLI
+├── vite.config.ts          # Vite config (dev server port 1420)
+├── tsconfig.json           # TypeScript config
+├── index.html              # HTML entry point
+│
+├── src/                    # React + TypeScript frontend
+│   ├── main.tsx            # React entry
+│   ├── App.tsx             # App root — checks setup status, renders wizard
+│   ├── App.css             # All styles (CSS custom properties, no framework)
+│   └── components/
+│       ├── SetupWizard.tsx # Multi-step wizard shell + progress bar
+│       └── steps/
+│           ├── WelcomeStep.tsx     # Step 0: intro & feature list
+│           ├── ClaudeAuthStep.tsx  # Step 1: claude.ai embedded login
+│           ├── WhatsAppStep.tsx    # Step 2: WA QR scan
+│           └── DoneStep.tsx        # Step 3: confirmation & start
+│
+├── src-tauri/              # Tauri Rust backend
+│   ├── Cargo.toml
+│   ├── build.rs
+│   ├── tauri.conf.json     # App config: window size, sidecar, bundle
+│   ├── capabilities/
+│   │   └── default.json    # Tauri v2 permission declarations
+│   ├── binaries/           # Pre-built sidecar binaries (gitignored)
+│   │   └── nare-bridge-x86_64-unknown-linux-gnu  # built by npm run build:bridge
+│   └── src/
+│       ├── main.rs         # Binary entry (calls lib.rs::run)
+│       ├── lib.rs          # Plugin registration + invoke_handler
+│       └── commands.rs     # All Tauri commands (see §Commands)
+│
+└── bridge/                 # Node.js WhatsApp bridge (Baileys)
+    ├── package.json        # deps: @whiskeysockets/baileys, qrcode, pkg
+    └── index.js            # Sidecar: reads stdin commands, writes stdout events
 ```
 
 ---
 
 ## Architecture
 
-The system has two processes communicating over a Unix Domain Socket:
+### Process model
 
 ```
-WhatsApp <──WebSocket──> blunux-whatsapp-bridge (Node.js)
-                                │
-                    /run/user/$UID/blunux-ai.sock
-                                │
-                         blunux-ai-agent (Rust)
-                                │
-                    ┌───────────┴───────────┐
-                    │      Provider Layer   │
-                    │  Claude API / OAuth   │
-                    │  DeepSeek API         │
-                    └───────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    │     System Tools      │
-                    │  pacman/yay, systemctl│
-                    │  journalctl, nmcli    │
-                    └───────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                  NARE Tauri App (Desktop)                 │
+│                                                          │
+│  ┌────────────────────────┐   ┌────────────────────────┐ │
+│  │  React Frontend        │   │  Rust Backend          │ │
+│  │  (Tauri WebView)       │◄──│  (src-tauri/)          │ │
+│  │                        │   │                        │ │
+│  │  • SetupWizard         │   │  • check_setup_status  │ │
+│  │  • ClaudeAuthStep      │   │  • open_claude_login   │ │
+│  │  • WhatsAppStep        │   │  • start_wa_bridge     │ │
+│  │  • DoneStep            │   │  • start_services      │ │
+│  └────────────────────────┘   └──────────┬─────────────┘ │
+│                                          │               │
+│                              Tauri sidecar spawn         │
+│                                          │               │
+│                              ┌───────────▼─────────────┐ │
+│                              │  nare-bridge (Node.js)  │ │
+│                              │  Baileys / WhatsApp Web │ │
+│                              │  stdout → JSON events   │ │
+│                              │  stdin  ← JSON commands │ │
+│                              └───────────┬─────────────┘ │
+└──────────────────────────────────────────┼───────────────┘
+                                           │ WebSocket
+                                    WhatsApp servers
+```
+
+### Claude login flow
+
+```
+User clicks "Sign in with Claude"
+        │
+        ▼
+Tauri opens embedded webview → https://claude.ai/login
+        │
+        │  user logs in normally
+        ▼
+on_navigation() detects post-login URL
+(claude.ai/new | claude.ai/chat/... | claude.ai/)
+        │
+        ▼
+Write ~/.config/nare/credentials/claude  ("oauth:browser")
+Emit "claude-auth-success" → React frontend
+Close webview window
+```
+
+### WhatsApp QR flow
+
+```
+User clicks "Start WhatsApp Setup"
+        │
+        ▼
+Tauri spawns nare-bridge sidecar
+        │
+bridge outputs: { "event": "qr", "data": "<base64 PNG>" }
+        │
+        ▼
+Tauri emits "wa-qr" event → React shows QR image
+        │
+        │  user scans with phone
+        ▼
+bridge outputs: { "event": "ready", "phone": "821012345678" }
+        │
+        ▼
+Write ~/.config/nare/config.toml with allowed_numbers
+Emit "wa-authenticated" → React advances to Done step
 ```
 
 ### Components
 
 | Component | Language | Role |
 |---|---|---|
-| `crates/ai-agent` | Rust | Core agent: AI provider, tools, memory, CLI |
-| `blunux-whatsapp-bridge` | Node.js | WhatsApp ↔ agent IPC bridge |
-| `blunux-ai-installer` | Bash | App Installer card script |
-| `crates/blunux-config` | Rust | Config parsing (shared, extended with `AiAgent`) |
+| `src/` | React + TypeScript | Setup wizard UI, future chat view |
+| `src-tauri/` | Rust (Tauri 2) | Window management, sidecar spawn, config I/O |
+| `bridge/` | Node.js | WhatsApp client via Baileys (packaged as sidecar binary) |
 
 ---
 
-## Planned Module Structure (crates/ai-agent/src/)
+## Development Workflow
+
+### Prerequisites
+
+```bash
+# Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Node.js 18+ (for frontend + bridge)
+# On Arch: sudo pacman -S nodejs npm
+
+# Tauri system deps (Arch)
+sudo pacman -S webkit2gtk base-devel
+
+# Install JS dependencies
+npm install
+cd bridge && npm install && cd ..
+```
+
+### Running in development
+
+```bash
+npm run tauri dev          # starts Vite dev server + Tauri window
+```
+
+### Building the bridge sidecar (required before production build)
+
+```bash
+npm run build:bridge
+# produces: src-tauri/binaries/nare-bridge-x86_64-unknown-linux-gnu
+```
+
+### Production build
+
+```bash
+npm run build:bridge       # build sidecar first
+npm run tauri build        # produces installer in src-tauri/target/release/bundle/
+```
+
+### Tauri commands (Rust → frontend IPC)
+
+| Command | Description |
+|---|---|
+| `check_setup_status` | Returns `{ claude_configured, wa_configured }` |
+| `open_claude_login` | Opens embedded webview to claude.ai; emits `claude-auth-success` on success |
+| `start_wa_bridge` | Spawns `nare-bridge` sidecar; emits `wa-qr` and `wa-authenticated` events |
+| `start_services` | Runs `systemctl --user enable --now` for both NARE services |
+
+### Tauri events (Rust → React)
+
+| Event | Payload | When |
+|---|---|---|
+| `claude-auth-success` | `null` | User completes claude.ai login |
+| `wa-qr` | `string` (base64 PNG data URL) | Bridge generates new QR |
+| `wa-authenticated` | `string` (phone number) | WhatsApp scan confirmed |
+| `wa-disconnected` | `null` | Bridge loses connection |
+
+---
+
+## Planned Module Structure (future CLI — crates/ai-agent/src/)
 
 ```
 src/
@@ -97,30 +237,36 @@ src/
 
 ## Tech Stack
 
-### Rust crate dependencies (Cargo.toml)
+### Frontend (src/)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `react` | 18 | UI framework |
+| `react-dom` | 18 | DOM rendering |
+| `@tauri-apps/api` | 2 | `invoke`, `listen`, `emit` |
+| `@tauri-apps/plugin-shell` | 2 | Sidecar spawn (frontend side) |
+| `vite` | 5 | Dev server + bundler |
+| `typescript` | 5 | Type checking |
+
+### Rust backend (src-tauri/)
 
 ```toml
-tokio          = { version = "1", features = ["full"] }   # async runtime
-reqwest        = { version = "0.12", features = ["json"] } # HTTP (Claude/DeepSeek)
-serde          = { version = "1", features = ["derive"] }
-serde_json     = "1"
-clap           = { version = "4", features = ["derive"] }  # CLI
-anyhow         = "1"
-thiserror      = "1"
-async-trait    = "0.1"
-dialoguer      = "0.11"   # setup wizard prompts
-crossterm      = "0.27"   # terminal control
-indicatif      = "0.17"   # progress bars
-toml           = "0.8"
-chrono         = { version = "0.4", features = ["serde"] }
-dirs           = "5"
-blunux-config  = { path = "../blunux-config" }
+tauri               = "2"          # app framework
+tauri-plugin-shell  = "2"          # sidecar spawn
+tauri-plugin-opener = "2"          # open URLs
+serde               = "1"          # JSON serialization
+serde_json          = "1"
+dirs                = "5"          # ~/.config path
 ```
 
-### Node.js bridge
+### Node.js bridge (bridge/)
 
-- `whatsapp-web.js` — WhatsApp Web API (unofficial, unofficial risk documented)
-- Unix domain socket (Node.js `net` module) for IPC
+| Package | Purpose |
+|---|---|
+| `@whiskeysockets/baileys` | WhatsApp Web protocol (no Puppeteer/browser required) |
+| `qrcode` | Generate QR PNG data URL |
+| `pino` | Silent logger (suppresses Baileys noise) |
+| `pkg` (dev) | Compile bridge to standalone binary for Tauri sidecar |
 
 ---
 
