@@ -10,6 +10,9 @@ src-tauri/gen/
 # Sidecar binaries (built locally)
 src-tauri/binaries/
 
+# Packaged installer (built by scripts/package-run.sh)
+nare.run
+
 # Tauri debug artifacts
 src-tauri/WixTools/
 
