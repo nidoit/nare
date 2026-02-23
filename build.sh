@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Build NARE for the current architecture
+# build.sh — Build NARE and package into nare.run
 # Usage: ./build.sh [--dev | --release]
 set -euo pipefail
 
@@ -111,20 +111,78 @@ echo "    sidecar ready: $SIDECAR_PATH"
 if [ "$MODE" = "--dev" ]; then
     echo "==> Starting Tauri dev server..."
     npx tauri dev
-else
-    echo "==> Building Tauri app (release)..."
-    npx tauri build
-
-    # Show output location
-    BUNDLE_DIR="src-tauri/target/release/bundle"
-    echo ""
-    echo "==> Build complete! Bundles:"
-    if [ -d "$BUNDLE_DIR" ]; then
-        find "$BUNDLE_DIR" -maxdepth 2 -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) 2>/dev/null | while read -r f; do
-            echo "    $(basename "$f")  →  $f"
-        done
-    fi
-    echo ""
-    echo "    Binary: src-tauri/target/release/nare"
-    echo "    Run with: ./nare.run"
+    exit 0
 fi
+
+echo "==> Building Tauri app (release)..."
+npx tauri build
+
+BINARY="src-tauri/target/release/nare"
+
+# ── Package into nare.run ────────────────────────────────────────────────────
+
+check_dep makeself "sudo pacman -S makeself"
+
+VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9][^"]*\)".*/\1/')
+echo "==> Packaging nare.run (v${VERSION})..."
+
+STAGE_DIR="$(mktemp -d)"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+
+# Binary (stripped)
+cp "$BINARY" "$STAGE_DIR/nare"
+strip "$STAGE_DIR/nare" 2>/dev/null || true
+echo "    nare ($(du -h "$STAGE_DIR/nare" | cut -f1))"
+
+# Sidecar
+if [ -x "$SIDECAR_PATH" ]; then
+    cp "$SIDECAR_PATH" "$STAGE_DIR/nare-bridge"
+    echo "    nare-bridge ($(du -h "$STAGE_DIR/nare-bridge" | cut -f1))"
+fi
+
+# Icons
+for icon in icon.png 32x32.png; do
+    if [ -f "src-tauri/icons/$icon" ]; then
+        cp "src-tauri/icons/$icon" "$STAGE_DIR/$icon"
+        echo "    $icon"
+    fi
+done
+
+# Desktop entry
+cat > "$STAGE_DIR/nare.desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=NARE
+Comment=Notification & Automated Reporting Engine
+Exec=nare
+Icon=nare
+Terminal=false
+Type=Application
+Categories=System;Utility;
+Keywords=linux;assistant;ai;whatsapp;notification;
+StartupWMClass=nare
+DESKTOP
+echo "    nare.desktop"
+
+# Install script
+cp scripts/install.sh "$STAGE_DIR/install.sh"
+chmod +x "$STAGE_DIR/install.sh"
+echo "    install.sh"
+
+# Create .run
+makeself --gzip --notemp \
+    "$STAGE_DIR" \
+    nare.run \
+    "NARE v${VERSION} — Notification & Automated Reporting Engine" \
+    ./install.sh
+
+chmod +x nare.run
+
+echo ""
+echo "==> Build complete!"
+echo ""
+echo "    nare.run  ($(du -h nare.run | cut -f1))"
+echo ""
+echo "    Install:    sudo ./nare.run"
+echo "    User-local: NARE_PREFIX=~/.local ./nare.run"
+echo "    Uninstall:  sudo ./nare.run -- --uninstall"
+echo ""
