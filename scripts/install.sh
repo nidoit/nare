@@ -149,11 +149,24 @@ if command -v update-desktop-database &>/dev/null; then
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 fi
 
-# ── Done ─────────────────────────────────────────────────────────────────────
+# ── Launch ────────────────────────────────────────────────────────────────────
 
 echo ""
 echo "==> NARE v0.1.0 installed successfully!"
 echo ""
-echo "    Run:        nare"
+
+# Launch as the real user (not root) so the GUI works
+REAL_USER="${SUDO_USER:-$USER}"
+if [ -n "$DISPLAY" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    echo "==> Launching NARE..."
+    if [ "$(id -u)" -eq 0 ] && [ "$REAL_USER" != "root" ]; then
+        su - "$REAL_USER" -c "DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u "$REAL_USER")} nohup '$BIN_DIR/nare' &>/dev/null &"
+    else
+        nohup "$BIN_DIR/nare" &>/dev/null &
+    fi
+else
+    echo "    No display detected. Run manually:  nare"
+fi
+
 echo "    Uninstall:  sudo ./nare.run -- --uninstall"
 echo ""
