@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# nare.run — Launch NARE on Arch Linux
+# Usage: ./nare.run
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ── Locate the binary ────────────────────────────────────────────────────────
+
+BINARY=""
+
+# 1. Release build in the repo
+if [ -x "$SCRIPT_DIR/src-tauri/target/release/nare" ]; then
+    BINARY="$SCRIPT_DIR/src-tauri/target/release/nare"
+# 2. Debug build in the repo
+elif [ -x "$SCRIPT_DIR/src-tauri/target/debug/nare" ]; then
+    BINARY="$SCRIPT_DIR/src-tauri/target/debug/nare"
+# 3. System-installed
+elif command -v nare &>/dev/null; then
+    BINARY="$(command -v nare)"
+fi
+
+if [ -z "$BINARY" ]; then
+    echo "error: NARE binary not found."
+    echo ""
+    echo "Build it first:"
+    echo "  ./build.sh            # full release build"
+    echo "  ./build.sh --dev      # dev mode (hot reload)"
+    exit 1
+fi
+
+# ── Check runtime dependencies ────────────────────────────────────────────────
+
+missing=()
+
+# WebKitGTK is required by Tauri on Linux
+if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null && \
+   ! pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+    missing+=("webkit2gtk")
+fi
+
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "error: missing runtime dependencies: ${missing[*]}"
+    echo ""
+    echo "Install them:"
+    echo "  sudo pacman -S ${missing[*]}"
+    exit 1
+fi
+
+# ── Launch ────────────────────────────────────────────────────────────────────
+
+echo "Starting NARE..."
+exec "$BINARY" "$@"
