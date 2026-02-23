@@ -1,6 +1,6 @@
-# TDD: Blunux AI Agent — Technical Design Document
+# TDD: NARE — Technical Design Document
 
-- **Project:** Blunux AI Agent
+- **Project:** NARE
 - **Version:** 1.0.0 (Phase 1 design — all phases implemented)
 - **Date:** 2026-02-21
 - **Author:** Jaewoo Joung (정재우)
@@ -52,7 +52,7 @@ crates/ai-agent/
 name = "ai-agent"
 version = "0.1.0"
 edition = "2021"
-description = "Blunux AI Agent — natural language Linux system management"
+description = "NARE — natural language Linux system management"
 license = "MIT"
 
 [[bin]]
@@ -839,7 +839,7 @@ impl Memory {
 ```
 [SYSTEM PROMPT]
 
-You are Blunux AI Agent, a Linux system management assistant for Blunux (Arch-based).
+You are NARE, a Linux system management assistant for Blunux (Arch-based).
 You help users manage their system using natural language.
 Available tools: [tool list]
 Safe mode: [on/off]
@@ -926,7 +926,7 @@ Step 8: Done
 // src/main.rs
 
 #[derive(Parser)]
-#[command(name = "blunux-ai", about = "Blunux AI Agent")]
+#[command(name = "blunux-ai", about = "NARE")]
 struct Cli {
     /// Path to blunux config.toml (for language detection)
     #[arg(long, default_value = "/usr/share/blunux/config.toml")]

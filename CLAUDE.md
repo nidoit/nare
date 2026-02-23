@@ -1,4 +1,4 @@
-# CLAUDE.md — Blunux AI Agent (NARE)
+# CLAUDE.md — NARE
 
 > **Notification & Automated Reporting Engine**
 > This file is for AI assistants working in this repository. It documents codebase structure, design decisions, conventions, and workflows.
@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-**Blunux AI Agent** is one of three differentiating features of the Blunux Linux distribution (Arch-based). It enables users to manage their Linux system through natural language via WhatsApp messages, backed by Claude or DeepSeek AI.
+**NARE** is one of three differentiating features of the Blunux Linux distribution (Arch-based). It enables users to manage their Linux system through natural language via WhatsApp messages, backed by Claude or DeepSeek AI.
 
 - **Binary name:** `blunux-ai`
 - **Crate name:** `ai-agent`
