@@ -1,2 +1,2 @@
-Notification & Automated Reporting Engine
+NARE — Notification & Automated Reporting Engine
 
