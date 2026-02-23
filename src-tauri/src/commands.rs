@@ -44,21 +44,18 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
         let _ = w.close();
     }
 
-    let login_window = WebviewWindowBuilder::new(
+    let app_clone = app.clone();
+    let _login_window = WebviewWindowBuilder::new(
         &app,
         "claude-login",
         tauri::WebviewUrl::External(
-            "https://claude.ai/login".parse().map_err(|e: url::ParseError| e.to_string())?,
+            "https://claude.ai/login".parse::<tauri::Url>().map_err(|e| e.to_string())?,
         ),
     )
     .title("Sign in with Claude")
     .inner_size(1000.0, 720.0)
     .center()
-    .build()
-    .map_err(|e| e.to_string())?;
-
-    let app_clone = app.clone();
-    login_window.on_navigation(move |url| {
+    .on_navigation(move |url| {
         let url_str = url.as_str();
         let is_post_login = url_str == "https://claude.ai/"
             || url_str.starts_with("https://claude.ai/new")
@@ -83,9 +80,11 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
             }
         }
 
-        // Return true to allow navigation
+        // Allow all navigations
         true
-    });
+    })
+    .build()
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
