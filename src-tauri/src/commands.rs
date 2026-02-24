@@ -27,7 +27,7 @@ pub fn check_setup_status() -> SetupStatus {
     let dir = config_dir();
     SetupStatus {
         claude_configured: dir.join("credentials/claude").exists(),
-        wa_configured: dir.join("whatsapp/session").exists(),
+        wa_configured: dir.join("whatsapp/session/creds.json").exists(),
     }
 }
 
