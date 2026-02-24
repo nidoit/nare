@@ -13,16 +13,15 @@ fn config_dir() -> PathBuf {
 
 /// Locate the bridge/ directory containing index.js.
 /// Search order:
-///   1. Dev mode: CARGO_MANIFEST_DIR/../bridge/  (project root)
+///   1. Dev mode: CARGO_MANIFEST_DIR/../bridge/  (baked in at compile time)
 ///   2. Installed (FHS): <exe>/../share/nare/bridge/  (/usr/local/share/nare/bridge/)
-///   3. Portable: <exe-dir>/bridge/
+///   3. CWD: ./bridge/  (running from project root)
 fn find_bridge_dir() -> Option<PathBuf> {
-    // 1. Dev mode
-    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
-        let dev = PathBuf::from(manifest).join("../bridge");
-        if dev.join("index.js").exists() {
-            return Some(dev);
-        }
+    // 1. Dev mode — CARGO_MANIFEST_DIR is resolved at compile time
+    //    e.g. /home/user/nare/src-tauri → /home/user/nare/bridge
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bridge");
+    if dev.join("index.js").exists() {
+        return Some(dev);
     }
 
     if let Ok(exe) = std::env::current_exe() {
@@ -32,13 +31,13 @@ fn find_bridge_dir() -> Option<PathBuf> {
             if fhs.join("index.js").exists() {
                 return Some(fhs);
             }
-
-            // 3. Portable: bridge/ next to the binary
-            let portable = exe_dir.join("bridge");
-            if portable.join("index.js").exists() {
-                return Some(portable);
-            }
         }
+    }
+
+    // 3. CWD fallback: ./bridge/ (running from project root)
+    let cwd = PathBuf::from("bridge");
+    if cwd.join("index.js").exists() {
+        return Some(cwd);
     }
 
     None

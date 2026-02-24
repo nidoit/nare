@@ -71,6 +71,17 @@ if [ "$UNINSTALL" = true ]; then
     rm -f  "$ICON_DIR/512x512/apps/nare.png"
     rm -f  "$ICON_DIR/32x32/apps/nare.png"
 
+    # Clean up user config (WhatsApp session data)
+    # When running via sudo, use the real user's home directory
+    REAL_HOME="${HOME}"
+    if [ -n "${SUDO_USER:-}" ]; then
+        REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    fi
+    if [ -d "$REAL_HOME/.config/nare/whatsapp/session" ]; then
+        rm -rf "$REAL_HOME/.config/nare/whatsapp/session"
+        info "Cleaned  → $REAL_HOME/.config/nare/whatsapp/session"
+    fi
+
     # Update icon cache if available
     if command -v gtk-update-icon-cache &>/dev/null; then
         gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
