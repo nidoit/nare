@@ -11,6 +11,25 @@ fn config_dir() -> PathBuf {
         .join(".config/nare")
 }
 
+/// Resolve the project root (where bridge/ lives).
+/// In dev mode `CARGO_MANIFEST_DIR/../` works; in production the binary sits
+/// next to the bridge directory inside the installed bundle.
+fn project_root() -> PathBuf {
+    // Try CARGO_MANIFEST_DIR first (set during `cargo build` / `tauri dev`)
+    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
+        return PathBuf::from(manifest)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+    }
+    // Fallback: assume we're running from the project root
+    // (or the executable's parent directory)
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -27,7 +46,7 @@ pub fn check_setup_status() -> SetupStatus {
     let dir = config_dir();
     SetupStatus {
         claude_configured: dir.join("credentials/claude").exists(),
-        wa_configured: dir.join("whatsapp/session").exists(),
+        wa_configured: dir.join("whatsapp/session/creds.json").exists(),
     }
 }
 
@@ -89,74 +108,96 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Spawn the nare-bridge sidecar for the chosen WhatsApp library.
-/// `library` is either `"baileys"` or `"whatsapp-web-js"`.
+/// Spawn the WhatsApp bridge using Baileys (via `node bridge/index.js`).
+/// Installs bridge npm dependencies automatically if missing.
 /// Bridge output lines are JSON events; we parse them and emit Tauri events.
 #[tauri::command]
-pub async fn start_wa_bridge(app: AppHandle, library: String) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
-    use tauri_plugin_shell::process::CommandEvent;
+pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::BufRead;
 
-    // Validate library choice
-    if library != "baileys" && library != "whatsapp-web-js" {
-        return Err(format!("Unknown WhatsApp library: {library}"));
+    let bridge_dir = project_root().join("bridge");
+    let bridge_script = bridge_dir.join("index.js");
+
+    if !bridge_script.exists() {
+        return Err(format!(
+            "Bridge script not found at {}. Make sure the bridge/ directory exists.",
+            bridge_script.display()
+        ));
     }
 
-    // Persist the library choice to config
-    save_wa_library(&library);
+    // Auto-install bridge dependencies if node_modules is missing
+    if !bridge_dir.join("node_modules").exists() {
+        let npm_status = Command::new("npm")
+            .arg("install")
+            .current_dir(&bridge_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .status()
+            .map_err(|e| format!("Failed to run `npm install` in bridge/: {e}"))?;
+
+        if !npm_status.success() {
+            return Err("Failed to install bridge dependencies. Run `cd bridge && npm install` manually.".into());
+        }
+    }
 
     // Ensure session directory exists
     let session_dir = config_dir().join("whatsapp/session");
     fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
 
-    // Select the sidecar binary based on library choice
-    let sidecar_name = match library.as_str() {
-        "whatsapp-web-js" => "nare-bridge-wwjs",
-        _ => "nare-bridge",
-    };
-
-    let (mut rx, _child) = app
-        .shell()
-        .sidecar(sidecar_name)
-        .map_err(|e| e.to_string())?
+    // Spawn `node bridge/index.js`
+    let child = Command::new("node")
+        .arg(&bridge_script)
         .env("WA_SESSION_DIR", session_dir.to_string_lossy().as_ref())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to start bridge: {e}. Is Node.js installed?"))?;
 
+    let stdout = child.stdout.ok_or("Failed to capture bridge stdout")?;
+    let stderr = child.stderr.ok_or("Failed to capture bridge stderr")?;
+
+    // Read stdout in background thread — parse JSON events
     let app_clone = app.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(bytes) => {
-                    let line = String::from_utf8_lossy(&bytes);
-                    if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) {
-                        match msg.get("event").and_then(|v| v.as_str()) {
-                            Some("qr") => {
-                                if let Some(data) = msg.get("data").and_then(|v| v.as_str()) {
-                                    let _ = app_clone.emit("wa-qr", data.to_string());
-                                }
-                            }
-                            Some("ready") => {
-                                let phone = msg
-                                    .get("phone")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                write_config(&phone);
-                                let _ = app_clone.emit("wa-authenticated", phone);
-                            }
-                            Some("disconnected") => {
-                                let _ = app_clone.emit("wa-disconnected", ());
-                            }
-                            _ => {}
+    std::thread::spawn(move || {
+        let reader = std::io::BufReader::new(stdout);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            let trimmed = line.trim();
+            if trimmed.is_empty() { continue; }
+
+            if let Ok(msg) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                match msg.get("event").and_then(|v| v.as_str()) {
+                    Some("qr") => {
+                        if let Some(data) = msg.get("data").and_then(|v| v.as_str()) {
+                            let _ = app_clone.emit("wa-qr", data.to_string());
                         }
                     }
+                    Some("ready") => {
+                        let phone = msg
+                            .get("phone")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        write_config(&phone);
+                        let _ = app_clone.emit("wa-authenticated", phone);
+                    }
+                    Some("disconnected") => {
+                        let _ = app_clone.emit("wa-disconnected", ());
+                    }
+                    _ => {}
                 }
-                CommandEvent::Stderr(bytes) => {
-                    eprintln!("[nare-bridge] {}", String::from_utf8_lossy(&bytes));
-                }
-                _ => {}
             }
+        }
+    });
+
+    // Read stderr in background thread — log bridge errors
+    std::thread::spawn(move || {
+        let reader = std::io::BufReader::new(stderr);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            eprintln!("[nare-bridge] {}", line);
         }
     });
 
@@ -182,24 +223,9 @@ pub async fn start_services() -> Result<(), String> {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/// Persist the selected WhatsApp library to config so write_config can include it.
-fn save_wa_library(library: &str) {
-    let dir = config_dir();
-    let _ = fs::create_dir_all(&dir);
-    let _ = fs::write(dir.join("whatsapp_library"), library);
-}
-
-/// Read the previously selected WhatsApp library (defaults to "baileys").
-fn read_wa_library() -> String {
-    let path = config_dir().join("whatsapp_library");
-    fs::read_to_string(path).unwrap_or_else(|_| "baileys".to_string())
-}
-
 fn write_config(phone: &str) {
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
-
-    let library = read_wa_library();
 
     let allowed = if phone.is_empty() {
         String::new()
@@ -217,7 +243,7 @@ language         = "auto"
 safe_mode        = true
 
 [whatsapp]
-library          = "{library}"
+library          = "baileys"
 {allowed}
 require_prefix   = false
 session_timeout  = 3600
