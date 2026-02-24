@@ -30,6 +30,6 @@
     "active": true,
     "targets": ["deb", "rpm"],
     "icon": ["icons/icon.png"],
-    "externalBin": ["binaries/nare-bridge"]
+    "externalBin": ["binaries/nare-bridge", "binaries/nare-bridge-wwjs"]
   }
 }
