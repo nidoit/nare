@@ -38,23 +38,6 @@ detect_target_triple() {
 TARGET_TRIPLE="$(detect_target_triple)"
 echo "==> Detected target: $TARGET_TRIPLE"
 
-# ── Map to pkg target ────────────────────────────────────────────────────────
-
-pkg_target() {
-    case "$1" in
-        x86_64-unknown-linux-gnu)  echo "node18-linux-x64" ;;
-        aarch64-unknown-linux-gnu) echo "node18-linux-arm64" ;;
-        x86_64-apple-darwin)       echo "node18-macos-x64" ;;
-        aarch64-apple-darwin)      echo "node18-macos-arm64" ;;
-        *)
-            echo "error: no pkg target mapping for $1" >&2
-            exit 1
-            ;;
-    esac
-}
-
-PKG_TARGET="$(pkg_target "$TARGET_TRIPLE")"
-
 # ── Check dependencies ────────────────────────────────────────────────────────
 
 check_dep() {
@@ -91,20 +74,9 @@ npm install
 echo "==> Installing bridge dependencies..."
 (cd bridge && npm install)
 
-# ── Build bridge sidecar ─────────────────────────────────────────────────────
+# ── Prepare bridge (no sidecar — node runs bridge/index.js directly) ─────────
 
-SIDECAR_NAME="nare-bridge-${TARGET_TRIPLE}"
-SIDECAR_PATH="src-tauri/binaries/${SIDECAR_NAME}"
-
-echo "==> Building bridge sidecar → $SIDECAR_NAME"
-mkdir -p src-tauri/binaries
-
-npx --prefix bridge pkg bridge/index.js \
-    --targets "$PKG_TARGET" \
-    --output "$SIDECAR_PATH"
-
-chmod +x "$SIDECAR_PATH"
-echo "    sidecar ready: $SIDECAR_PATH"
+echo "==> Bridge dependencies ready (will be bundled as source)"
 
 # ── Build Tauri app ──────────────────────────────────────────────────────────
 
@@ -134,10 +106,14 @@ cp "$BINARY" "$STAGE_DIR/nare"
 strip "$STAGE_DIR/nare" 2>/dev/null || true
 echo "    nare ($(du -h "$STAGE_DIR/nare" | cut -f1))"
 
-# Sidecar
-if [ -x "$SIDECAR_PATH" ]; then
-    cp "$SIDECAR_PATH" "$STAGE_DIR/nare-bridge"
-    echo "    nare-bridge ($(du -h "$STAGE_DIR/nare-bridge" | cut -f1))"
+# Bridge source + dependencies (node runs these directly)
+mkdir -p "$STAGE_DIR/bridge"
+cp bridge/index.js bridge/package.json "$STAGE_DIR/bridge/"
+if [ -d bridge/node_modules ]; then
+    cp -r bridge/node_modules "$STAGE_DIR/bridge/node_modules"
+    echo "    bridge/ ($(du -sh "$STAGE_DIR/bridge" | cut -f1))"
+else
+    echo "    bridge/ (deps will be installed on first run)"
 fi
 
 # Icons

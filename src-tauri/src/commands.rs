@@ -11,23 +11,37 @@ fn config_dir() -> PathBuf {
         .join(".config/nare")
 }
 
-/// Resolve the project root (where bridge/ lives).
-/// In dev mode `CARGO_MANIFEST_DIR/../` works; in production the binary sits
-/// next to the bridge directory inside the installed bundle.
-fn project_root() -> PathBuf {
-    // Try CARGO_MANIFEST_DIR first (set during `cargo build` / `tauri dev`)
+/// Locate the bridge/ directory containing index.js.
+/// Search order:
+///   1. Dev mode: CARGO_MANIFEST_DIR/../bridge/  (project root)
+///   2. Installed (FHS): <exe>/../share/nare/bridge/  (/usr/local/share/nare/bridge/)
+///   3. Portable: <exe-dir>/bridge/
+fn find_bridge_dir() -> Option<PathBuf> {
+    // 1. Dev mode
     if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
-        return PathBuf::from(manifest)
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."));
+        let dev = PathBuf::from(manifest).join("../bridge");
+        if dev.join("index.js").exists() {
+            return Some(dev);
+        }
     }
-    // Fallback: assume we're running from the project root
-    // (or the executable's parent directory)
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."))
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // 2. FHS installed: /usr/local/bin/nare → /usr/local/share/nare/bridge/
+            let fhs = exe_dir.join("../share/nare/bridge");
+            if fhs.join("index.js").exists() {
+                return Some(fhs);
+            }
+
+            // 3. Portable: bridge/ next to the binary
+            let portable = exe_dir.join("bridge");
+            if portable.join("index.js").exists() {
+                return Some(portable);
+            }
+        }
+    }
+
+    None
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -116,15 +130,14 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
     use std::process::{Command, Stdio};
     use std::io::BufRead;
 
-    let bridge_dir = project_root().join("bridge");
+    let bridge_dir = find_bridge_dir().ok_or_else(|| {
+        "WhatsApp bridge not found. Searched:\n  \
+         - bridge/ (dev mode)\n  \
+         - ../share/nare/bridge/ (installed)\n\
+         Make sure NARE is properly installed or run from the project root."
+            .to_string()
+    })?;
     let bridge_script = bridge_dir.join("index.js");
-
-    if !bridge_script.exists() {
-        return Err(format!(
-            "Bridge script not found at {}. Make sure the bridge/ directory exists.",
-            bridge_script.display()
-        ));
-    }
 
     // Auto-install bridge dependencies if node_modules is missing
     if !bridge_dir.join("node_modules").exists() {
