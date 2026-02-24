@@ -89,20 +89,35 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Spawn the nare-bridge sidecar (Node.js / Baileys WhatsApp client).
+/// Spawn the nare-bridge sidecar for the chosen WhatsApp library.
+/// `library` is either `"baileys"` or `"whatsapp-web-js"`.
 /// Bridge output lines are JSON events; we parse them and emit Tauri events.
 #[tauri::command]
-pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
+pub async fn start_wa_bridge(app: AppHandle, library: String) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
     use tauri_plugin_shell::process::CommandEvent;
+
+    // Validate library choice
+    if library != "baileys" && library != "whatsapp-web-js" {
+        return Err(format!("Unknown WhatsApp library: {library}"));
+    }
+
+    // Persist the library choice to config
+    save_wa_library(&library);
 
     // Ensure session directory exists
     let session_dir = config_dir().join("whatsapp/session");
     fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
 
+    // Select the sidecar binary based on library choice
+    let sidecar_name = match library.as_str() {
+        "whatsapp-web-js" => "nare-bridge-wwjs",
+        _ => "nare-bridge",
+    };
+
     let (mut rx, _child) = app
         .shell()
-        .sidecar("nare-bridge")
+        .sidecar(sidecar_name)
         .map_err(|e| e.to_string())?
         .env("WA_SESSION_DIR", session_dir.to_string_lossy().as_ref())
         .spawn()
@@ -167,9 +182,24 @@ pub async fn start_services() -> Result<(), String> {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/// Persist the selected WhatsApp library to config so write_config can include it.
+fn save_wa_library(library: &str) {
+    let dir = config_dir();
+    let _ = fs::create_dir_all(&dir);
+    let _ = fs::write(dir.join("whatsapp_library"), library);
+}
+
+/// Read the previously selected WhatsApp library (defaults to "baileys").
+fn read_wa_library() -> String {
+    let path = config_dir().join("whatsapp_library");
+    fs::read_to_string(path).unwrap_or_else(|_| "baileys".to_string())
+}
+
 fn write_config(phone: &str) {
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
+
+    let library = read_wa_library();
 
     let allowed = if phone.is_empty() {
         String::new()
@@ -187,6 +217,7 @@ language         = "auto"
 safe_mode        = true
 
 [whatsapp]
+library          = "{library}"
 {allowed}
 require_prefix   = false
 session_timeout  = 3600

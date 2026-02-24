@@ -395,6 +395,114 @@ html, body {
   color: var(--accent);
 }
 
+/* ── Library Selection Cards ──────────────────────────────────── */
+.library-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.library-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: inherit;
+  color: inherit;
+}
+
+.library-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(124, 106, 247, 0.12);
+}
+
+.library-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.library-card-icon {
+  font-size: 24px;
+}
+
+.library-card-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.library-card-badge.popular {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.library-card-badge.lightweight {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+}
+
+.library-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.library-card p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.library-card-tag {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.library-card-tag.free {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+
+/* ── Inline link button ──────────────────────────────────────── */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link:hover {
+  color: var(--accent-dim);
+}
+
 /* ── WhatsApp QR ──────────────────────────────────────────────── */
 .qr-container {
   margin: 20px auto 0;
@@ -526,6 +634,7 @@ const state = {
   step: 0,
   claudeAuthed: false,
   claudeLoading: false,
+  waLibrary: null, // null | 'baileys' | 'whatsapp-web-js'
   waState: 'idle', // idle | starting | qr | connected | error
   waPhone: null,
 };
@@ -668,12 +777,48 @@ function renderClaude() {
 
 // ── Step 2: WhatsApp ─────────────────────────────────────────────
 function renderWhatsApp() {
+  // Phase 1: Library selection
+  if (!state.waLibrary) {
+    return `
+      <div class="step">
+        <div class="step-icon">\uD83D\uDCF1</div>
+        <h1>Connect WhatsApp</h1>
+        <p>Choose a WhatsApp library to connect your device.</p>
+        <div class="library-cards">
+          <button class="library-card" id="btn-pick-wwjs">
+            <div class="library-card-header">
+              <span class="library-card-icon">\uD83D\uDCAC</span>
+              <span class="library-card-badge popular">Most Popular</span>
+            </div>
+            <h3>whatsapp-web.js</h3>
+            <p>Full-featured WhatsApp Web API client with broad community support.</p>
+            <span class="library-card-tag free">Free</span>
+          </button>
+          <button class="library-card" id="btn-pick-baileys">
+            <div class="library-card-header">
+              <span class="library-card-icon">\u26A1</span>
+              <span class="library-card-badge lightweight">Lightweight</span>
+            </div>
+            <h3>Baileys</h3>
+            <p>Lightweight WhatsApp Web socket client — no browser needed.</p>
+            <span class="library-card-tag free">Free</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Phase 2: Bridge connection
+  const libName = state.waLibrary === 'baileys' ? 'Baileys' : 'whatsapp-web.js';
   let content = '';
 
   if (state.waState === 'idle') {
     content = `
       <div class="step-actions">
         <button class="btn btn-primary" id="btn-wa-start">Start WhatsApp Setup</button>
+        <p style="font-size: 11px; color: var(--text-muted);">
+          A QR code will appear — scan it with your phone to link this device.
+        </p>
         <span class="sim-badge">\u26A1 Click simulates QR + scan</span>
       </div>
     `;
@@ -715,8 +860,11 @@ function renderWhatsApp() {
   return `
     <div class="step">
       <div class="step-icon">\uD83D\uDCF1</div>
-      <h1>Connect WhatsApp</h1>
-      <p>Link your WhatsApp so NARE can receive and send messages.</p>
+      <h1>Add Device</h1>
+      <p>
+        Using <strong>${libName}</strong> —
+        <button class="btn-link" id="btn-wa-change-lib">change</button>
+      </p>
       ${content}
     </div>
   `;
@@ -763,7 +911,7 @@ function renderFooter() {
 
   let nextDisabled = false;
   if (state.step === 1 && !state.claudeAuthed) nextDisabled = true;
-  if (state.step === 2 && !state.waPhone) nextDisabled = true;
+  if (state.step === 2 && (!state.waLibrary || !state.waPhone)) nextDisabled = true;
 
   const nextLabel = state.step === STEPS.length - 2 ? 'Finish \u2192' : 'Next \u2192';
 
@@ -850,6 +998,28 @@ function bindEvents() {
   });
 
   if (btnClaudeLogin) btnClaudeLogin.addEventListener('click', simulateClaudeLogin);
+
+  // Library selection buttons
+  const btnPickWwjs = document.getElementById('btn-pick-wwjs');
+  const btnPickBaileys = document.getElementById('btn-pick-baileys');
+  const btnWaChangeLib = document.getElementById('btn-wa-change-lib');
+  const btnWaStart = document.getElementById('btn-wa-start');
+
+  if (btnPickWwjs) btnPickWwjs.addEventListener('click', () => {
+    state.waLibrary = 'whatsapp-web-js';
+    state.waState = 'idle';
+    render();
+  });
+  if (btnPickBaileys) btnPickBaileys.addEventListener('click', () => {
+    state.waLibrary = 'baileys';
+    state.waState = 'idle';
+    render();
+  });
+  if (btnWaChangeLib) btnWaChangeLib.addEventListener('click', () => {
+    state.waLibrary = null;
+    state.waState = 'idle';
+    render();
+  });
   if (btnWaStart) btnWaStart.addEventListener('click', simulateWhatsApp);
 
   if (btnStartNare) btnStartNare.addEventListener('click', () => {
@@ -877,6 +1047,7 @@ function bindEvents() {
       state.step = 0;
       state.claudeAuthed = false;
       state.claudeLoading = false;
+      state.waLibrary = null;
       state.waState = 'idle';
       state.waPhone = null;
       render();
