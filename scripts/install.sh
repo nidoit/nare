@@ -86,6 +86,10 @@ echo "==> Checking runtime dependencies..."
 
 missing=()
 
+if ! command -v node &>/dev/null; then
+    missing+=("nodejs")
+fi
+
 if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null && \
    ! pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
     missing+=("webkit2gtk-4.1")
@@ -117,11 +121,11 @@ echo "==> Installing NARE to $PREFIX..."
 install -Dm755 nare "$BIN_DIR/nare"
 info "Binary  → $BIN_DIR/nare"
 
-# Sidecar (WhatsApp bridge) — optional, may not be included
-if [ -f nare-bridge ]; then
-    mkdir -p "$APP_DIR"
-    install -Dm755 nare-bridge "$APP_DIR/nare-bridge"
-    info "Sidecar → $APP_DIR/nare-bridge"
+# Bridge source (WhatsApp bridge — runs via node)
+if [ -d bridge ]; then
+    mkdir -p "$APP_DIR/bridge"
+    cp -r bridge/* "$APP_DIR/bridge/"
+    info "Bridge  → $APP_DIR/bridge/"
 fi
 
 # Icons
