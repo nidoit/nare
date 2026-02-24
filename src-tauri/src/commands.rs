@@ -76,6 +76,9 @@ pub fn check_setup_status() -> SetupStatus {
 /// in with their Claude Pro/Max account.  When a successful post-login URL is
 /// detected, the credentials marker is written and a `claude-auth-success`
 /// event is emitted to all windows.
+///
+/// Detection uses both `on_navigation` (for real page navigations) and URL
+/// polling (for SPA/pushState navigations that don't trigger on_navigation).
 #[tauri::command]
 pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
     use tauri::WebviewWindowBuilder;
@@ -97,37 +100,54 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
     .inner_size(1000.0, 720.0)
     .center()
     .on_navigation(move |url| {
-        let url_str = url.as_str();
-        let is_post_login = url_str == "https://claude.ai/"
-            || url_str.starts_with("https://claude.ai/new")
-            || url_str.starts_with("https://claude.ai/chat/")
-            || url_str.starts_with("https://claude.ai/project/");
-
-        if is_post_login {
-            // Write credentials marker (OAuth token managed by claude CLI / browser)
-            let creds_dir = config_dir().join("credentials");
-            let _ = fs::create_dir_all(&creds_dir);
-            let _ = fs::write(creds_dir.join("claude"), "oauth:browser");
-
-            // Emit success event to React frontend
-            let _ = app_clone.emit("claude-auth-success", ());
-
-            // Close the login window after a short delay so the user sees the redirect
-            if let Some(w) = app_clone.get_webview_window("claude-login") {
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(600));
-                    let _ = w.close();
-                });
-            }
+        if is_claude_post_login(url.as_str()) {
+            handle_claude_login_success(&app_clone);
         }
-
-        // Allow all navigations
         true
     })
     .build()
     .map_err(|e| e.to_string())?;
 
+    // Poll the webview URL every second to catch SPA (pushState) navigations
+    // that don't trigger on_navigation.
+    let app_poll = app.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+
+            let Some(w) = app_poll.get_webview_window("claude-login") else {
+                break; // Window was closed
+            };
+
+            if let Ok(url) = w.url() {
+                if is_claude_post_login(url.as_str()) {
+                    handle_claude_login_success(&app_poll);
+                    // Close after a short delay
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                    let _ = w.close();
+                    break;
+                }
+            }
+        }
+    });
+
     Ok(())
+}
+
+/// Check if a URL indicates the user has successfully logged into claude.ai.
+fn is_claude_post_login(url: &str) -> bool {
+    url == "https://claude.ai/"
+        || url.starts_with("https://claude.ai/new")
+        || url.starts_with("https://claude.ai/chat/")
+        || url.starts_with("https://claude.ai/project/")
+}
+
+/// Write credentials marker and emit success event.
+fn handle_claude_login_success(app: &AppHandle) {
+    let creds_dir = config_dir().join("credentials");
+    let _ = fs::create_dir_all(&creds_dir);
+    let _ = fs::write(creds_dir.join("claude"), "oauth:browser");
+    let _ = app.emit("claude-auth-success", ());
 }
 
 /// Spawn the WhatsApp bridge using Baileys (via `node bridge/index.js`).
