@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NARE — Setup Wizard Preview</title>
+  <style>
+/* ── Reset & Base ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:          #0f1117;
+  --bg-card:     #1a1d27;
+  --bg-hover:    #22263a;
+  --border:      #2d3148;
+  --accent:      #7c6af7;
+  --accent-dim:  #4e3fc7;
+  --green:       #22c55e;
+  --red:         #ef4444;
+  --text:        #e8eaf6;
+  --text-muted:  #8b8fa8;
+  --radius:      12px;
+  --font:        'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Preview banner ──────────────────────────────────────────── */
+.preview-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: linear-gradient(90deg, #7c6af7, #a78bfa);
+  color: white;
+  text-align: center;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* ── App shell ───────────────────────────────────────────────── */
+.app-shell {
+  width: 800px;
+  height: 600px;
+  margin: 48px auto 24px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Title bar simulation */
+.title-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  background: #161821;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  user-select: none;
+}
+
+.title-bar-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.title-bar-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.title-bar-dot.red { background: #ff5f57; }
+.title-bar-dot.yellow { background: #ffbd2e; }
+.title-bar-dot.green { background: #28c840; }
+
+.title-bar-text {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Loading ──────────────────────────────────────────────────── */
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── App Ready ────────────────────────────────────────────────── */
+.app-ready {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.ready-content {
+  text-align: center;
+  max-width: 360px;
+}
+
+.ready-icon { font-size: 48px; margin-bottom: 16px; }
+
+.ready-content h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.ready-content p {
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.ready-content code {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.subtext { font-size: 12px; }
+
+/* ── Setup Wizard ─────────────────────────────────────────────── */
+.wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  user-select: none;
+}
+
+/* Progress bar */
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 24px 40px 0;
+}
+
+.wizard-step-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wizard-step-dot:first-child { flex: 0 0 auto; }
+
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin-bottom: 20px;
+  transition: background 0.3s;
+}
+
+.step-connector.done { background: var(--green); }
+
+.dot-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  position: relative;
+  z-index: 1;
+}
+
+.dot-circle.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.dot-circle.done {
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+}
+
+.dot-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dot-label.active { color: var(--accent); }
+.dot-label.done   { color: var(--green); }
+
+/* Content */
+.wizard-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 40px;
+  overflow-y: auto;
+}
+
+/* Footer */
+.wizard-footer {
+  padding: 16px 40px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+.btn {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.btn-primary:not(:disabled):hover { background: var(--accent-dim); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-ghost:not(:disabled):hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ── Step shared ──────────────────────────────────────────────── */
+.step {
+  width: 100%;
+  max-width: 480px;
+  text-align: center;
+}
+
+.step-icon { font-size: 48px; margin-bottom: 20px; }
+
+.step h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.step p {
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.step-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* ── Welcome ──────────────────────────────────────────────────── */
+.brand-name {
+  font-size: 36px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #7c6af7, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.brand-tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 24px !important;
+}
+
+.feature-list {
+  list-style: none;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 20px 0 0;
+}
+
+.feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.feature-list li:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.feature-list .feat-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+/* ── Claude Auth ──────────────────────────────────────────────── */
+.auth-state {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.waiting {
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  color: var(--text-muted);
+}
+
+.status-badge.success {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+}
+
+.status-badge.loading {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+/* ── WhatsApp QR ──────────────────────────────────────────────── */
+.qr-container {
+  margin: 20px auto 0;
+  width: 200px;
+  height: 200px;
+  background: white;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.qr-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 12px;
+}
+
+.qr-grid {
+  width: 160px;
+  height: 160px;
+  display: grid;
+  grid-template-columns: repeat(21, 1fr);
+  grid-template-rows: repeat(21, 1fr);
+  gap: 0;
+}
+
+.qr-grid .qr-cell {
+  background: white;
+}
+
+.qr-grid .qr-cell.dark {
+  background: #000;
+}
+
+.qr-instructions {
+  margin-top: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  text-align: left;
+}
+
+.qr-instructions ol {
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+/* ── Done ─────────────────────────────────────────────────────── */
+.done-details {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.done-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.done-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+.done-row .done-key { flex: 0 0 110px; font-weight: 500; color: var(--text); }
+
+/* ── Simulation badge ────────────────────────────────────────── */
+.sim-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+/* ── Fade transitions ────────────────────────────────────────── */
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+  </style>
+</head>
+<body>
+
+<div class="preview-banner">
+  NARE Setup Wizard — Browser Preview (no Tauri required) &nbsp;|&nbsp; Interactions are simulated
+</div>
+
+<div class="app-shell" id="app">
+  <!-- Title bar -->
+  <div class="title-bar">
+    <div class="title-bar-dots">
+      <div class="title-bar-dot red"></div>
+      <div class="title-bar-dot yellow"></div>
+      <div class="title-bar-dot green"></div>
+    </div>
+    <div class="title-bar-text">NARE</div>
+    <div style="width: 52px"></div>
+  </div>
+
+  <!-- App content rendered by JS -->
+  <div id="app-content" style="display: flex; flex-direction: column; flex: 1;"></div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+const state = {
+  step: 0,
+  claudeAuthed: false,
+  claudeLoading: false,
+  waState: 'idle', // idle | starting | qr | connected | error
+  waPhone: null,
+};
+
+const STEPS = ['Welcome', 'Claude', 'WhatsApp', 'Done'];
+
+// ── Render engine ────────────────────────────────────────────────
+function render() {
+  const el = document.getElementById('app-content');
+  el.innerHTML = renderWizard();
+  bindEvents();
+}
+
+function renderWizard() {
+  return `
+    <div class="wizard">
+      ${renderProgress()}
+      <div class="wizard-content">
+        <div class="fade-in">
+          ${renderStep()}
+        </div>
+      </div>
+      ${renderFooter()}
+    </div>
+  `;
+}
+
+function renderProgress() {
+  return `
+    <div class="wizard-progress">
+      ${STEPS.map((label, i) => {
+        const connector = i > 0
+          ? `<div class="step-connector ${i <= state.step ? 'done' : ''}"></div>`
+          : '';
+        const circleClass = i < state.step ? 'done' : i === state.step ? 'active' : '';
+        const labelClass = i < state.step ? 'done' : i === state.step ? 'active' : '';
+        const content = i < state.step ? '\u2713' : (i + 1);
+        return `
+          ${connector}
+          <div class="wizard-step-dot">
+            <div class="dot-circle ${circleClass}">${content}</div>
+            <span class="dot-label ${labelClass}">${label}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderStep() {
+  switch (state.step) {
+    case 0: return renderWelcome();
+    case 1: return renderClaude();
+    case 2: return renderWhatsApp();
+    case 3: return renderDone();
+    default: return '';
+  }
+}
+
+// ── Step 0: Welcome ──────────────────────────────────────────────
+function renderWelcome() {
+  return `
+    <div class="step">
+      <div class="step-icon">\uD83E\uDD16</div>
+      <div class="brand-name">NARE</div>
+      <p class="brand-tagline">Notification &amp; Automated Reporting Engine</p>
+      <p>
+        Manage your Blunux Linux system through natural language — right from
+        WhatsApp.
+      </p>
+      <ul class="feature-list">
+        <li>
+          <span class="feat-icon">\uD83E\uDD16</span>
+          <span><strong>AI-powered</strong> — Claude or DeepSeek understands your requests</span>
+        </li>
+        <li>
+          <span class="feat-icon">\uD83D\uDCAC</span>
+          <span><strong>WhatsApp interface</strong> — no new app to learn</span>
+        </li>
+        <li>
+          <span class="feat-icon">\u2699\uFE0F</span>
+          <span><strong>System tools</strong> — install packages, manage services, read logs</span>
+        </li>
+        <li>
+          <span class="feat-icon">\uD83D\uDD12</span>
+          <span><strong>Safe by default</strong> — destructive commands always ask first</span>
+        </li>
+      </ul>
+      <p style="margin-top: 20px; font-size: 12px;">
+        This wizard will connect NARE to Claude and your WhatsApp in two steps.
+      </p>
+    </div>
+  `;
+}
+
+// ── Step 1: Claude Auth ──────────────────────────────────────────
+function renderClaude() {
+  let badge, button = '', hint = '';
+
+  if (state.claudeAuthed) {
+    badge = `<span class="status-badge success">\u2713 Signed in to Claude</span>`;
+  } else if (state.claudeLoading) {
+    badge = `
+      <span class="status-badge loading">
+        <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+        Waiting for login\u2026
+      </span>
+    `;
+  } else {
+    badge = `<span class="status-badge waiting">Not signed in</span>`;
+    button = `
+      <button class="btn btn-primary" id="btn-claude-login">
+        Sign in with Claude
+      </button>
+    `;
+    hint = `
+      <p style="font-size: 11px; color: var(--text-muted);">
+        Requires a <a href="#" style="color: var(--accent);">Claude Pro or Max</a> subscription.
+      </p>
+    `;
+  }
+
+  return `
+    <div class="step">
+      <div class="step-icon">\uD83D\uDD11</div>
+      <h1>Sign in with Claude</h1>
+      <p>
+        NARE uses your Claude Pro or Max subscription — no API key needed.<br/>
+        A login window will open inside the app.
+      </p>
+      <div class="auth-state">
+        ${badge}
+        ${button}
+        ${hint}
+      </div>
+      ${!state.claudeAuthed ? `<div style="margin-top: 12px;"><span class="sim-badge">\u26A1 Click simulates 2s login</span></div>` : ''}
+    </div>
+  `;
+}
+
+// ── Step 2: WhatsApp ─────────────────────────────────────────────
+function renderWhatsApp() {
+  let content = '';
+
+  if (state.waState === 'idle') {
+    content = `
+      <div class="step-actions">
+        <button class="btn btn-primary" id="btn-wa-start">Start WhatsApp Setup</button>
+        <span class="sim-badge">\u26A1 Click simulates QR + scan</span>
+      </div>
+    `;
+  } else if (state.waState === 'starting') {
+    content = `
+      <div class="step-actions">
+        <span class="status-badge loading">
+          <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+          Starting bridge\u2026
+        </span>
+      </div>
+    `;
+  } else if (state.waState === 'qr') {
+    content = `
+      <div class="qr-container">
+        ${generateQrSvg()}
+      </div>
+      <div class="qr-instructions">
+        <ol>
+          <li>Open WhatsApp on your phone</li>
+          <li>Tap Menu (\u22EE) \u2192 Linked Devices</li>
+          <li>Tap "Link a Device"</li>
+          <li>Point your camera at the QR code above</li>
+        </ol>
+      </div>
+      <div class="step-actions">
+        <span class="status-badge waiting">Waiting for scan\u2026</span>
+        <span class="sim-badge">\u26A1 Auto-connects in 3s</span>
+      </div>
+    `;
+  } else if (state.waState === 'connected') {
+    content = `
+      <div class="step-actions">
+        <span class="status-badge success">\u2713 Connected — +${state.waPhone}</span>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="step">
+      <div class="step-icon">\uD83D\uDCF1</div>
+      <h1>Connect WhatsApp</h1>
+      <p>Link your WhatsApp so NARE can receive and send messages.</p>
+      ${content}
+    </div>
+  `;
+}
+
+// ── Step 3: Done ─────────────────────────────────────────────────
+function renderDone() {
+  return `
+    <div class="step">
+      <div class="step-icon">\uD83C\uDF89</div>
+      <h1>You're all set!</h1>
+      <p>
+        NARE is configured and ready. Send a WhatsApp message to start managing
+        your system.
+      </p>
+      <div class="done-details">
+        <div class="done-row">
+          <span class="done-key">Claude</span>
+          <span>${state.claudeAuthed ? '\u2705 Connected' : '\u26A0\uFE0F Not connected'}</span>
+        </div>
+        <div class="done-row">
+          <span class="done-key">WhatsApp</span>
+          <span>${state.waPhone ? '\u2705 +' + state.waPhone : '\u26A0\uFE0F Not linked'}</span>
+        </div>
+        <div class="done-row">
+          <span class="done-key">Config</span>
+          <span style="font-size: 11px; color: var(--text-muted);">~/.config/nare/config.toml</span>
+        </div>
+      </div>
+      <div class="step-actions">
+        <button class="btn btn-primary" id="btn-start-nare">Start NARE \u2192</button>
+        <p style="font-size: 11px; color: var(--text-muted);">
+          Try sending: "What's my disk usage?" on WhatsApp
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// ── Footer navigation ────────────────────────────────────────────
+function renderFooter() {
+  const showBack = state.step > 0 && state.step < STEPS.length - 1;
+  const showNext = state.step < STEPS.length - 1;
+
+  let nextDisabled = false;
+  if (state.step === 1 && !state.claudeAuthed) nextDisabled = true;
+  if (state.step === 2 && !state.waPhone) nextDisabled = true;
+
+  const nextLabel = state.step === STEPS.length - 2 ? 'Finish \u2192' : 'Next \u2192';
+
+  return `
+    <div class="wizard-footer">
+      ${showBack ? `<button class="btn btn-ghost" id="btn-back">\u2190 Back</button>` : ''}
+      ${showNext ? `<button class="btn btn-primary" id="btn-next" ${nextDisabled ? 'disabled' : ''}>${nextLabel}</button>` : ''}
+    </div>
+  `;
+}
+
+// ── QR code SVG generator (decorative) ───────────────────────────
+function generateQrSvg() {
+  // Generate a realistic-looking QR code pattern
+  const size = 21;
+  const cellSize = 7;
+  const totalSize = size * cellSize;
+  let cells = '';
+
+  // Seed-based pseudo-random for consistency
+  let seed = 42;
+  function rand() {
+    seed = (seed * 16807 + 0) % 2147483647;
+    return (seed - 1) / 2147483646;
+  }
+
+  // QR finder patterns (top-left, top-right, bottom-left)
+  const finderPositions = [[0,0], [14,0], [0,14]];
+  const isFinderCell = (x, y) => {
+    for (const [fx, fy] of finderPositions) {
+      const rx = x - fx, ry = y - fy;
+      if (rx >= 0 && rx < 7 && ry >= 0 && ry < 7) {
+        // Outer border
+        if (rx === 0 || rx === 6 || ry === 0 || ry === 6) return true;
+        // Inner square
+        if (rx >= 2 && rx <= 4 && ry >= 2 && ry <= 4) return true;
+        return false;
+      }
+    }
+    return null; // not in finder area
+  };
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const finder = isFinderCell(x, y);
+      let dark;
+      if (finder !== null) {
+        dark = finder;
+      } else {
+        // Timing patterns
+        if (x === 6) dark = y % 2 === 0;
+        else if (y === 6) dark = x % 2 === 0;
+        else dark = rand() > 0.5;
+      }
+      if (dark) {
+        cells += `<rect x="${x * cellSize}" y="${y * cellSize}" width="${cellSize}" height="${cellSize}" fill="#000"/>`;
+      }
+    }
+  }
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="180" height="180" style="background:white; padding: 10px;">
+      ${cells}
+    </svg>
+  `;
+}
+
+// ── Event binding ────────────────────────────────────────────────
+function bindEvents() {
+  const btnNext = document.getElementById('btn-next');
+  const btnBack = document.getElementById('btn-back');
+  const btnClaudeLogin = document.getElementById('btn-claude-login');
+  const btnWaStart = document.getElementById('btn-wa-start');
+  const btnStartNare = document.getElementById('btn-start-nare');
+
+  if (btnNext) btnNext.addEventListener('click', () => {
+    state.step = Math.min(state.step + 1, STEPS.length - 1);
+    render();
+  });
+
+  if (btnBack) btnBack.addEventListener('click', () => {
+    state.step = Math.max(state.step - 1, 0);
+    render();
+  });
+
+  if (btnClaudeLogin) btnClaudeLogin.addEventListener('click', simulateClaudeLogin);
+  if (btnWaStart) btnWaStart.addEventListener('click', simulateWhatsApp);
+
+  if (btnStartNare) btnStartNare.addEventListener('click', () => {
+    // Show the "app ready" state
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+      <div class="app-ready fade-in">
+        <div class="ready-content">
+          <div class="ready-icon">\u2705</div>
+          <h2>NARE is running</h2>
+          <p>
+            Your system is connected. Send a WhatsApp message to start managing
+            your Linux system.
+          </p>
+          <p class="subtext">
+            Use <code>blunux-ai status</code> from the terminal to check service status.
+          </p>
+          <div style="margin-top: 20px;">
+            <button class="btn btn-ghost" id="btn-restart-demo">Restart Demo</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-restart-demo').addEventListener('click', () => {
+      state.step = 0;
+      state.claudeAuthed = false;
+      state.claudeLoading = false;
+      state.waState = 'idle';
+      state.waPhone = null;
+      render();
+    });
+  });
+}
+
+// ── Simulated Tauri interactions ─────────────────────────────────
+function simulateClaudeLogin() {
+  state.claudeLoading = true;
+  render();
+
+  // Simulate login delay (2 seconds)
+  setTimeout(() => {
+    state.claudeAuthed = true;
+    state.claudeLoading = false;
+    render();
+  }, 2000);
+}
+
+function simulateWhatsApp() {
+  state.waState = 'starting';
+  render();
+
+  // Simulate bridge startup (1 second)
+  setTimeout(() => {
+    state.waState = 'qr';
+    render();
+
+    // Simulate QR scan (3 seconds)
+    setTimeout(() => {
+      state.waState = 'connected';
+      state.waPhone = '821012345678';
+      render();
+    }, 3000);
+  }, 1000);
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+// Show loading spinner, then wizard
+const content = document.getElementById('app-content');
+content.innerHTML = '<div class="app-loading"><div class="spinner"></div></div>';
+setTimeout(() => {
+  render();
+}, 800);
+</script>
+
+</body>
+</html>
