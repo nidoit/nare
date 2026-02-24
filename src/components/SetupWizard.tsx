@@ -6,21 +6,20 @@ import DoneStep from "./steps/DoneStep";
 
 interface Props {
   initialClaudeConfigured: boolean;
-  initialWaConfigured: boolean;
+  initialMessengerConfigured: boolean;
 }
 
-const STEPS = ["Welcome", "Claude", "WhatsApp", "Done"];
+const STEPS = ["Welcome", "Claude", "Messenger", "Done"];
 
 export default function SetupWizard({
   initialClaudeConfigured,
-  initialWaConfigured,
+  initialMessengerConfigured,
 }: Props) {
-  // Start past already-completed steps
-  const initialStep = initialWaConfigured ? 3 : initialClaudeConfigured ? 2 : 0;
+  const initialStep = initialMessengerConfigured ? 3 : initialClaudeConfigured ? 2 : 0;
 
   const [step, setStep] = useState(initialStep);
   const [claudeAuthed, setClaudeAuthed] = useState(initialClaudeConfigured);
-  const [waPhone, setWaPhone] = useState<string | null>(null);
+  const [messengerId, setMessengerId] = useState<string | null>(null);
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -64,10 +63,10 @@ export default function SetupWizard({
           />
         )}
         {step === 2 && (
-          <WhatsAppStep onConnected={(phone) => setWaPhone(phone)} />
+          <WhatsAppStep onConnected={(id) => setMessengerId(id)} />
         )}
         {step === 3 && (
-          <DoneStep claudeAuthed={claudeAuthed} waPhone={waPhone} />
+          <DoneStep claudeAuthed={claudeAuthed} waPhone={messengerId} />
         )}
       </div>
 
@@ -84,7 +83,7 @@ export default function SetupWizard({
             onClick={next}
             disabled={
               (step === 1 && !claudeAuthed) ||
-              (step === 2 && !waPhone)
+              (step === 2 && !messengerId)
             }
           >
             {step === STEPS.length - 2 ? "Finish →" : "Next →"}
