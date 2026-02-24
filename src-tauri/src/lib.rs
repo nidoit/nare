@@ -1,7 +1,8 @@
 mod commands;
 
 use commands::{
-    check_setup_status, open_claude_login, start_services, start_wa_bridge, stop_wa_bridge,
+    check_setup_status, open_claude_login, start_services,
+    start_wa_bridge, start_telegram_bridge, stop_bridge,
     BridgeState,
 };
 use std::io::Write;
@@ -19,7 +20,8 @@ pub fn run() {
             check_setup_status,
             open_claude_login,
             start_wa_bridge,
-            stop_wa_bridge,
+            start_telegram_bridge,
+            stop_bridge,
             start_services,
         ])
         .on_window_event(|window, event| {

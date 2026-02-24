@@ -4,7 +4,7 @@ import SetupWizard from "./components/SetupWizard";
 
 interface SetupStatus {
   claude_configured: boolean;
-  wa_configured: boolean;
+  messenger_configured: boolean;
 }
 
 export default function App() {
@@ -22,25 +22,24 @@ export default function App() {
     );
   }
 
-  const setupComplete = status.claude_configured && status.wa_configured;
+  const setupComplete = status.claude_configured && status.messenger_configured;
 
   if (!setupComplete) {
     return (
       <SetupWizard
         initialClaudeConfigured={status.claude_configured}
-        initialWaConfigured={status.wa_configured}
+        initialMessengerConfigured={status.messenger_configured}
       />
     );
   }
 
-  // Main app view (post-setup) — to be expanded in future iterations
   return (
     <div className="app-ready">
       <div className="ready-content">
         <div className="ready-icon">✅</div>
         <h2>NARE is running</h2>
         <p>
-          Your system is connected. Send a WhatsApp message to start managing
+          Your system is connected. Send a message to start managing
           your Linux system.
         </p>
         <p className="subtext">
