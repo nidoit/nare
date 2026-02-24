@@ -6,6 +6,13 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
+// ── Embedded bridge source ──────────────────────────────────────────────────
+
+/// Bridge JavaScript and package.json are embedded at compile time.
+/// They get extracted to ~/.config/nare/bridge/ on first use.
+const BRIDGE_INDEX_JS: &str = include_str!("../../bridge/index.js");
+const BRIDGE_PACKAGE_JSON: &str = include_str!("../../bridge/package.json");
+
 // ── Bridge state ─────────────────────────────────────────────────────────
 
 /// Holds the running bridge child process so we can prevent duplicate spawns
@@ -20,69 +27,23 @@ fn config_dir() -> PathBuf {
         .join(".config/nare")
 }
 
-/// Locate the bridge/ directory containing index.js.
-/// Search order:
-///   1. Dev mode: CARGO_MANIFEST_DIR/../bridge/  (baked in at compile time)
-///   2. FHS relative to exe: <exe>/../share/nare/bridge/
-///   3. Hardcoded FHS paths: /usr/local/share/nare/bridge/, /usr/share/nare/bridge/
-///   4. User data: ~/.local/share/nare/bridge/
-///   5. CWD: ./bridge/
-fn find_bridge_dir() -> Result<PathBuf, String> {
-    let mut searched = Vec::new();
+/// Ensure the bridge source files exist at ~/.config/nare/bridge/.
+/// Writes the embedded index.js and package.json if missing or outdated.
+fn ensure_bridge_extracted() -> Result<PathBuf, String> {
+    let bridge_dir = config_dir().join("bridge");
+    fs::create_dir_all(&bridge_dir)
+        .map_err(|e| format!("Failed to create bridge dir: {e}"))?;
 
-    // 1. Dev mode — CARGO_MANIFEST_DIR is resolved at compile time
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bridge");
-    let dev = dev.canonicalize().unwrap_or(dev);
-    searched.push(format!("{}", dev.display()));
-    if dev.join("index.js").exists() {
-        return Ok(dev);
-    }
+    let index_path = bridge_dir.join("index.js");
+    let pkg_path = bridge_dir.join("package.json");
 
-    // 2. FHS relative to exe: /usr/local/bin/nare → /usr/local/share/nare/bridge/
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let fhs = exe_dir.join("../share/nare/bridge");
-            let fhs = fhs.canonicalize().unwrap_or(fhs);
-            searched.push(format!("{}", fhs.display()));
-            if fhs.join("index.js").exists() {
-                return Ok(fhs);
-            }
-        }
-    }
+    // Always overwrite to keep in sync with the binary version
+    fs::write(&index_path, BRIDGE_INDEX_JS)
+        .map_err(|e| format!("Failed to write bridge/index.js: {e}"))?;
+    fs::write(&pkg_path, BRIDGE_PACKAGE_JSON)
+        .map_err(|e| format!("Failed to write bridge/package.json: {e}"))?;
 
-    // 3. Hardcoded well-known FHS paths
-    for path in ["/usr/local/share/nare/bridge", "/usr/share/nare/bridge"] {
-        let p = PathBuf::from(path);
-        if !searched.iter().any(|s| s == path) {
-            searched.push(path.to_string());
-        }
-        if p.join("index.js").exists() {
-            return Ok(p);
-        }
-    }
-
-    // 4. User-local: ~/.local/share/nare/bridge/
-    if let Some(home) = dirs::home_dir() {
-        let local = home.join(".local/share/nare/bridge");
-        searched.push(format!("{}", local.display()));
-        if local.join("index.js").exists() {
-            return Ok(local);
-        }
-    }
-
-    // 5. CWD fallback: ./bridge/
-    let cwd = PathBuf::from("bridge");
-    searched.push("./bridge".to_string());
-    if cwd.join("index.js").exists() {
-        return Ok(cwd);
-    }
-
-    Err(format!(
-        "WhatsApp bridge not found (index.js missing).\n\
-         Searched:\n{}\n\n\
-         Make sure NARE is properly installed (sudo ./nare.run) or run from the project root.",
-        searched.iter().map(|s| format!("  - {s}")).collect::<Vec<_>>().join("\n")
-    ))
+    Ok(bridge_dir)
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -207,7 +168,7 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    let bridge_dir = find_bridge_dir()?;
+    let bridge_dir = ensure_bridge_extracted()?;
     let bridge_script = bridge_dir.join("index.js");
 
     // Auto-install bridge dependencies if node_modules is missing
