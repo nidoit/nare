@@ -6,11 +6,9 @@ interface Props {
   onConnected: (phone: string) => void;
 }
 
-type Library = "baileys" | "whatsapp-web-js";
 type BridgeState = "idle" | "starting" | "qr" | "connected" | "error";
 
 export default function WhatsAppStep({ onConnected }: Props) {
-  const [library, setLibrary] = useState<Library | null>(null);
   const [state, setState] = useState<BridgeState>("idle");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
@@ -35,71 +33,21 @@ export default function WhatsAppStep({ onConnected }: Props) {
   }, [onConnected]);
 
   async function startBridge() {
-    if (!library) return;
     setError(null);
     setState("starting");
     try {
-      await invoke("start_wa_bridge", { library });
+      await invoke("start_wa_bridge");
     } catch (e) {
       setError(String(e));
       setState("error");
     }
   }
 
-  // Phase 1: Library selection
-  if (!library) {
-    return (
-      <div className="step">
-        <div className="step-icon">📱</div>
-        <h1>Connect WhatsApp</h1>
-        <p>Choose a WhatsApp library to connect your device.</p>
-
-        <div className="library-cards">
-          <button
-            className="library-card"
-            onClick={() => setLibrary("whatsapp-web-js")}
-          >
-            <div className="library-card-header">
-              <span className="library-card-icon">💬</span>
-              <span className="library-card-badge popular">Most Popular</span>
-            </div>
-            <h3>whatsapp-web.js</h3>
-            <p>Full-featured WhatsApp Web API client with broad community support.</p>
-            <span className="library-card-tag free">Free</span>
-          </button>
-
-          <button
-            className="library-card"
-            onClick={() => setLibrary("baileys")}
-          >
-            <div className="library-card-header">
-              <span className="library-card-icon">⚡</span>
-              <span className="library-card-badge lightweight">Lightweight</span>
-            </div>
-            <h3>Baileys</h3>
-            <p>Lightweight WhatsApp Web socket client — no browser needed.</p>
-            <span className="library-card-tag free">Free</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Phase 2: Bridge connection
   return (
     <div className="step">
       <div className="step-icon">📱</div>
-      <h1>Add Device</h1>
-      <p>
-        Using <strong>{library === "baileys" ? "Baileys" : "whatsapp-web.js"}</strong>
-        {" — "}
-        <button
-          className="btn-link"
-          onClick={() => { setLibrary(null); setState("idle"); setError(null); }}
-        >
-          change
-        </button>
-      </p>
+      <h1>Connect WhatsApp</h1>
+      <p>Link your WhatsApp so NARE can receive and send messages.</p>
 
       {state === "idle" && (
         <div className="step-actions">

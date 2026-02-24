@@ -29,7 +29,6 @@
   "bundle": {
     "active": true,
     "targets": ["deb", "rpm"],
-    "icon": ["icons/icon.png"],
-    "externalBin": ["binaries/nare-bridge", "binaries/nare-bridge-wwjs"]
+    "icon": ["icons/icon.png"]
   }
 }
