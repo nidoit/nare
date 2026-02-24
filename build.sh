@@ -93,8 +93,6 @@ BINARY="src-tauri/target/release/nare"
 
 # ── Package into nare.run ────────────────────────────────────────────────────
 
-check_dep makeself "sudo pacman -S makeself"
-
 VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9][^"]*\)".*/\1/')
 echo "==> Packaging nare.run (v${VERSION})..."
 
@@ -144,12 +142,37 @@ cp scripts/install.sh "$STAGE_DIR/install.sh"
 chmod +x "$STAGE_DIR/install.sh"
 echo "    install.sh"
 
-# Create .run
-makeself --gzip --notemp \
-    "$STAGE_DIR" \
-    nare.run \
-    "NARE v${VERSION} — Notification & Automated Reporting Engine" \
-    ./install.sh
+# Create .run — use makeself if available, otherwise build a simple self-extracting archive
+if command -v makeself &>/dev/null; then
+    makeself --gzip --notemp \
+        "$STAGE_DIR" \
+        nare.run \
+        "NARE v${VERSION} — Notification & Automated Reporting Engine" \
+        ./install.sh
+else
+    echo "    (makeself not found, using built-in self-extracting archive)"
+    # Create tar payload
+    PAYLOAD="$(mktemp)"
+    tar czf "$PAYLOAD" -C "$STAGE_DIR" .
+
+    # Write self-extracting header + payload
+    cat > nare.run <<'SFXHEADER'
+#!/usr/bin/env bash
+# NARE self-extracting installer
+set -euo pipefail
+TMPDIR="$(mktemp -d)"
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
+ARCHIVE_LINE=$(awk '/^__ARCHIVE__$/{print NR + 1; exit 0}' "$0")
+tail -n+"$ARCHIVE_LINE" "$0" | tar xz -C "$TMPDIR"
+cd "$TMPDIR"
+bash ./install.sh "$@"
+exit 0
+__ARCHIVE__
+SFXHEADER
+    cat "$PAYLOAD" >> nare.run
+    rm -f "$PAYLOAD"
+fi
 
 chmod +x nare.run
 
