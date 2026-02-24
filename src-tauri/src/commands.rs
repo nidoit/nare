@@ -23,33 +23,66 @@ fn config_dir() -> PathBuf {
 /// Locate the bridge/ directory containing index.js.
 /// Search order:
 ///   1. Dev mode: CARGO_MANIFEST_DIR/../bridge/  (baked in at compile time)
-///   2. Installed (FHS): <exe>/../share/nare/bridge/  (/usr/local/share/nare/bridge/)
-///   3. CWD: ./bridge/  (running from project root)
-fn find_bridge_dir() -> Option<PathBuf> {
+///   2. FHS relative to exe: <exe>/../share/nare/bridge/
+///   3. Hardcoded FHS paths: /usr/local/share/nare/bridge/, /usr/share/nare/bridge/
+///   4. User data: ~/.local/share/nare/bridge/
+///   5. CWD: ./bridge/
+fn find_bridge_dir() -> Result<PathBuf, String> {
+    let mut searched = Vec::new();
+
     // 1. Dev mode — CARGO_MANIFEST_DIR is resolved at compile time
-    //    e.g. /home/user/nare/src-tauri → /home/user/nare/bridge
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bridge");
+    let dev = dev.canonicalize().unwrap_or(dev);
+    searched.push(format!("{}", dev.display()));
     if dev.join("index.js").exists() {
-        return Some(dev);
+        return Ok(dev);
     }
 
+    // 2. FHS relative to exe: /usr/local/bin/nare → /usr/local/share/nare/bridge/
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            // 2. FHS installed: /usr/local/bin/nare → /usr/local/share/nare/bridge/
             let fhs = exe_dir.join("../share/nare/bridge");
+            let fhs = fhs.canonicalize().unwrap_or(fhs);
+            searched.push(format!("{}", fhs.display()));
             if fhs.join("index.js").exists() {
-                return Some(fhs);
+                return Ok(fhs);
             }
         }
     }
 
-    // 3. CWD fallback: ./bridge/ (running from project root)
-    let cwd = PathBuf::from("bridge");
-    if cwd.join("index.js").exists() {
-        return Some(cwd);
+    // 3. Hardcoded well-known FHS paths
+    for path in ["/usr/local/share/nare/bridge", "/usr/share/nare/bridge"] {
+        let p = PathBuf::from(path);
+        if !searched.iter().any(|s| s == path) {
+            searched.push(path.to_string());
+        }
+        if p.join("index.js").exists() {
+            return Ok(p);
+        }
     }
 
-    None
+    // 4. User-local: ~/.local/share/nare/bridge/
+    if let Some(home) = dirs::home_dir() {
+        let local = home.join(".local/share/nare/bridge");
+        searched.push(format!("{}", local.display()));
+        if local.join("index.js").exists() {
+            return Ok(local);
+        }
+    }
+
+    // 5. CWD fallback: ./bridge/
+    let cwd = PathBuf::from("bridge");
+    searched.push("./bridge".to_string());
+    if cwd.join("index.js").exists() {
+        return Ok(cwd);
+    }
+
+    Err(format!(
+        "WhatsApp bridge not found (index.js missing).\n\
+         Searched:\n{}\n\n\
+         Make sure NARE is properly installed (sudo ./nare.run) or run from the project root.",
+        searched.iter().map(|s| format!("  - {s}")).collect::<Vec<_>>().join("\n")
+    ))
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -174,13 +207,7 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    let bridge_dir = find_bridge_dir().ok_or_else(|| {
-        "WhatsApp bridge not found. Searched:\n  \
-         - bridge/ (dev mode)\n  \
-         - ../share/nare/bridge/ (installed)\n\
-         Make sure NARE is properly installed or run from the project root."
-            .to_string()
-    })?;
+    let bridge_dir = find_bridge_dir()?;
     let bridge_script = bridge_dir.join("index.js");
 
     // Auto-install bridge dependencies if node_modules is missing
