@@ -1,7 +1,16 @@
 use std::fs;
+use std::io::Write as _;
 use std::path::PathBuf;
+use std::process::Child;
+use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
+
+// ── Bridge state ─────────────────────────────────────────────────────────
+
+/// Holds the running bridge child process so we can prevent duplicate spawns
+/// and kill it cleanly when the app exits.
+pub struct BridgeState(pub Mutex<Option<Child>>);
 
 // ── Config directory ───────────────────────────────────────────────────────
 
@@ -124,10 +133,26 @@ pub async fn open_claude_login(app: AppHandle) -> Result<(), String> {
 /// Spawn the WhatsApp bridge using Baileys (via `node bridge/index.js`).
 /// Installs bridge npm dependencies automatically if missing.
 /// Bridge output lines are JSON events; we parse them and emit Tauri events.
+/// The child process is stored in BridgeState to prevent duplicates and enable cleanup.
 #[tauri::command]
 pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
     use std::process::{Command, Stdio};
     use std::io::BufRead;
+
+    let state = app.state::<BridgeState>();
+
+    // Kill any existing bridge before starting a new one
+    {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(mut child) = guard.take() {
+            // Send stop command via stdin, then kill
+            if let Some(ref mut stdin) = child.stdin {
+                let _ = stdin.write_all(b"{\"command\":\"stop\"}\n");
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 
     let bridge_dir = find_bridge_dir().ok_or_else(|| {
         "WhatsApp bridge not found. Searched:\n  \
@@ -158,7 +183,7 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
     fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
 
     // Spawn `node bridge/index.js`
-    let child = Command::new("node")
+    let mut child = Command::new("node")
         .arg(&bridge_script)
         .env("WA_SESSION_DIR", session_dir.to_string_lossy().as_ref())
         .stdin(Stdio::piped())
@@ -167,8 +192,14 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to start bridge: {e}. Is Node.js installed?"))?;
 
-    let stdout = child.stdout.ok_or("Failed to capture bridge stdout")?;
-    let stderr = child.stderr.ok_or("Failed to capture bridge stderr")?;
+    let stdout = child.stdout.take().ok_or("Failed to capture bridge stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to capture bridge stderr")?;
+
+    // Store child in state (stdin stays with the Child for later command sending)
+    {
+        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+        *guard = Some(child);
+    }
 
     // Read stdout in background thread — parse JSON events
     let app_clone = app.clone();
@@ -213,6 +244,21 @@ pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
         }
     });
 
+    Ok(())
+}
+
+/// Stop the running WhatsApp bridge process.
+#[tauri::command]
+pub fn stop_wa_bridge(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<BridgeState>();
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(mut child) = guard.take() {
+        if let Some(ref mut stdin) = child.stdin {
+            let _ = stdin.write_all(b"{\"command\":\"stop\"}\n");
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
     Ok(())
 }
 
