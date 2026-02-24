@@ -4,7 +4,10 @@ use commands::{
     check_setup_status, open_claude_login, start_services, start_wa_bridge, stop_wa_bridge,
     BridgeState,
 };
+use std::io::Write;
+use std::process::Child;
 use std::sync::Mutex;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,12 +24,11 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                // Kill bridge when the main window closes
                 if window.label() == "main" {
                     if let Some(state) = window.try_state::<BridgeState>() {
                         if let Ok(mut guard) = state.0.lock() {
-                            if let Some(mut child) = guard.take() {
-                                use std::io::Write;
+                            let opt: &mut Option<Child> = &mut *guard;
+                            if let Some(mut child) = opt.take() {
                                 if let Some(ref mut stdin) = child.stdin {
                                     let _ = stdin.write_all(b"{\"command\":\"stop\"}\n");
                                 }
