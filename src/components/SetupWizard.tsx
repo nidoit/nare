@@ -78,7 +78,6 @@ export default function SetupWizard({
         {step === 0 && <WelcomeStep />}
         {step === 1 && (
           <ClaudeAuthStep
-            authed={claudeAuthed}
             onAuthed={() => setClaudeAuthed(true)}
           />
         )}
