@@ -26,7 +26,7 @@
  */
 
 const https = require("https");
-const { execSync, execFileSync } = require("child_process");
+const { execSync, execFileSync, spawnSync } = require("child_process");
 const os = require("os");
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -39,9 +39,32 @@ if (!TOKEN) {
 
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || "";
 
+function isClaudeCliAvailable() {
+  try {
+    const result = spawnSync("claude", ["--version"], { encoding: "utf8", timeout: 5000 });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 // Auto-detect provider: explicit env > whichever key is set > claude (CLI)
-const AI_PROVIDER = process.env.AI_PROVIDER
+let AI_PROVIDER = process.env.AI_PROVIDER
   || (DEEPSEEK_KEY ? "deepseek" : "claude");
+
+// Validate the selected provider is actually usable
+if (AI_PROVIDER === "claude" && !isClaudeCliAvailable()) {
+  if (DEEPSEEK_KEY) {
+    AI_PROVIDER = "deepseek";
+    emit({ event: "info", message: "Claude CLI not found, falling back to DeepSeek" });
+  } else {
+    emit({ event: "error", message: "No AI provider available. Either install Claude CLI (curl -fsSL https://claude.ai/install.sh | bash) or configure a DeepSeek API key." });
+    process.exit(1);
+  }
+} else if (AI_PROVIDER === "deepseek" && !DEEPSEEK_KEY) {
+  emit({ event: "error", message: "DeepSeek selected but no API key configured." });
+  process.exit(1);
+}
 
 const API_BASE = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
@@ -206,7 +229,13 @@ async function callAI(chatId, userMessage) {
   // Check if user wants to run a command
   const cmdMatch = userMessage.match(/^\/run\s+(.+)$/);
   if (cmdMatch) {
-    return executeCommand(cmdMatch[1]);
+    const cmd = cmdMatch[1];
+    const confirmLabel = needsConfirmation(cmd);
+    if (confirmLabel) {
+      // Return special marker — caller will handle confirmation UI
+      return { needsConfirm: true, cmd, label: confirmLabel };
+    }
+    return executeCommand(cmd);
   }
 
   // Add user message
@@ -341,14 +370,42 @@ const BLOCKED_PATTERNS = [
   /mkfs\./,
   />\s*\/dev\/sd/,
   />\s*\/dev\/nvme/,
+  /\bcurl\b.*\|\s*\b(sh|bash)\b/,
+  /\bwget\b.*\|\s*\b(sh|bash)\b/,
 ];
 
+// Commands that are always blocked (exact match on first word)
+const BLOCKED_COMMANDS = [
+  "init", "telinit", "reboot", "shutdown", "halt", "poweroff",
+];
+
+// Patterns that require user confirmation before executing
+const CONFIRM_PATTERNS = [
+  { pattern: /\bsudo\b/,                label: "sudo" },
+  { pattern: /\bpacman\s+-S/,           label: "pacman install" },
+  { pattern: /\bpacman\s+-R/,           label: "pacman remove" },
+  { pattern: /\bpacman\s+-Syu/,         label: "system update" },
+  { pattern: /\byay\s+-S/,              label: "yay install" },
+  { pattern: /\byay\s+-R/,              label: "yay remove" },
+  { pattern: /\byay\s+-Syu/,            label: "system update" },
+  { pattern: /\bsystemctl\s+(enable|disable|start|stop|restart)\b/, label: "systemctl" },
+];
+
+// Track pending confirmations: chatId → { cmd, timer }
+const pendingConfirm = new Map();
+
 function executeCommand(cmd) {
-  // Safety check
+  // Safety check: blocked patterns
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(cmd)) {
-      return `BLOCKED: This command is not allowed for safety reasons.\n\`${cmd}\``;
+      return `🚫 *BLOCKED:* This command is not allowed for safety reasons.\n\`${cmd}\``;
     }
+  }
+
+  // Safety check: blocked commands (first word)
+  const firstWord = cmd.trim().split(/\s+/)[0];
+  if (BLOCKED_COMMANDS.includes(firstWord)) {
+    return `🚫 *BLOCKED:* \`${firstWord}\` is not allowed for safety reasons.`;
   }
 
   try {
@@ -365,6 +422,13 @@ function executeCommand(cmd) {
     const stderr = e.stderr ? e.stderr.trim() : e.message;
     return `\`\`\`\n$ ${cmd}\nError: ${stderr.slice(0, 2000)}\n\`\`\``;
   }
+}
+
+function needsConfirmation(cmd) {
+  for (const { pattern, label } of CONFIRM_PATTERNS) {
+    if (pattern.test(cmd)) return label;
+  }
+  return null;
 }
 
 // ── Validate token on startup ──────────────────────────────────────────────
@@ -404,7 +468,7 @@ async function poll() {
       for (const update of result.result || []) {
         offset = update.update_id + 1;
 
-        // Handle inline keyboard callbacks (language selection)
+        // Handle inline keyboard callbacks (language selection + command confirmation)
         if (update.callback_query) {
           const cb = update.callback_query;
           const cbChatId = String(cb.message.chat.id);
@@ -417,6 +481,25 @@ async function poll() {
               await apiPost("answerCallbackQuery", { callback_query_id: cb.id });
               await sendTelegram(cbChatId, t(cbChatId, "lang_set"));
             }
+          } else if (data === "confirm:yes") {
+            await apiPost("answerCallbackQuery", { callback_query_id: cb.id });
+            const pending = pendingConfirm.get(cbChatId);
+            if (pending) {
+              clearTimeout(pending.timer);
+              pendingConfirm.delete(cbChatId);
+              const result = executeCommand(pending.cmd);
+              await sendTelegram(cbChatId, result);
+            } else {
+              await sendTelegram(cbChatId, "No pending command.");
+            }
+          } else if (data === "confirm:no") {
+            await apiPost("answerCallbackQuery", { callback_query_id: cb.id });
+            const pending = pendingConfirm.get(cbChatId);
+            if (pending) {
+              clearTimeout(pending.timer);
+              pendingConfirm.delete(cbChatId);
+            }
+            await sendTelegram(cbChatId, "Cancelled.");
           }
           continue;
         }
@@ -469,10 +552,28 @@ async function poll() {
 
           const reply = await callAI(chatId, text);
 
-          // Send response (split if too long for Telegram's 4096 char limit)
-          const chunks = splitMessage(reply, 4000);
-          for (const chunk of chunks) {
-            await sendTelegram(chatId, chunk);
+          // Handle confirmation-required commands
+          if (reply && typeof reply === "object" && reply.needsConfirm) {
+            const timer = setTimeout(() => pendingConfirm.delete(chatId), 60000);
+            pendingConfirm.set(chatId, { cmd: reply.cmd, timer });
+            const keyboard = {
+              inline_keyboard: [[
+                { text: "Yes, run it", callback_data: "confirm:yes" },
+                { text: "Cancel", callback_data: "confirm:no" },
+              ]],
+            };
+            await apiPost("sendMessage", {
+              chat_id: chatId,
+              text: `⚠️ *${reply.label}* requires confirmation:\n\`${reply.cmd}\`\n\nExecute this command?`,
+              parse_mode: "Markdown",
+              reply_markup: JSON.stringify(keyboard),
+            });
+          } else {
+            // Send response (split if too long for Telegram's 4096 char limit)
+            const chunks = splitMessage(reply, 4000);
+            for (const chunk of chunks) {
+              await sendTelegram(chatId, chunk);
+            }
           }
         }
       }
