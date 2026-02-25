@@ -88,6 +88,86 @@ let offset = 0;
 let running = true;
 let connectedChatId = null;
 
+// ── Permissions ──────────────────────────────────────────────────────────
+
+const PERMS_PATH = path.join(os.homedir(), ".config", "nare", "permissions.json");
+const DEFAULT_PERMS = {
+  install_packages: false,
+  remove_packages: false,
+  system_update: false,
+  manage_services: false,
+  general_commands: false,
+};
+
+function loadPermissions() {
+  try {
+    const data = fs.readFileSync(PERMS_PATH, "utf8");
+    return { ...DEFAULT_PERMS, ...JSON.parse(data) };
+  } catch {
+    return { ...DEFAULT_PERMS };
+  }
+}
+
+// Safe commands — always auto-executed, no permission needed
+const SAFE_PATTERNS = [
+  /^\s*df\b/,
+  /^\s*free\b/,
+  /^\s*ps\b/,
+  /^\s*uptime\b/,
+  /^\s*uname\b/,
+  /^\s*hostname\b/,
+  /^\s*lscpu\b/,
+  /^\s*lsblk\b/,
+  /^\s*ip\s+(addr|link|route)\b/,
+  /^\s*nmcli\b/,
+  /^\s*journalctl\b/,
+  /^\s*pacman\s+-Q/,
+  /^\s*cat\s+\/etc\//,
+  /^\s*head\b/,
+  /^\s*tail\b/,
+  /^\s*wc\b/,
+  /^\s*whoami\b/,
+  /^\s*id\b/,
+  /^\s*date\b/,
+  /^\s*top\s+-b\b/,
+  /^\s*echo\b/,
+];
+
+function isSafeCommand(cmd) {
+  return SAFE_PATTERNS.some(p => p.test(cmd));
+}
+
+function isCommandAllowed(cmd) {
+  // Always blocked
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(cmd)) return { allowed: false, reason: "blocked" };
+  }
+  const firstWord = cmd.trim().split(/\s+/)[0];
+  if (BLOCKED_COMMANDS.includes(firstWord)) return { allowed: false, reason: "blocked" };
+
+  // Always safe
+  if (isSafeCommand(cmd)) return { allowed: true };
+
+  // Check permissions for elevated commands
+  const perms = loadPermissions();
+
+  if (/\bpacman\s+-S[yu]/i.test(cmd) || /\byay\s+-S[yu]/i.test(cmd)) {
+    return { allowed: perms.system_update, reason: "system_update" };
+  }
+  if (/\bpacman\s+-S\b/.test(cmd) || /\byay\s+-S\b/.test(cmd)) {
+    return { allowed: perms.install_packages, reason: "install_packages" };
+  }
+  if (/\bpacman\s+-R/.test(cmd) || /\byay\s+-R/.test(cmd)) {
+    return { allowed: perms.remove_packages, reason: "remove_packages" };
+  }
+  if (/\bsystemctl\s+(enable|disable|start|stop|restart)\b/.test(cmd)) {
+    return { allowed: perms.manage_services, reason: "manage_services" };
+  }
+
+  // General command (including sudo)
+  return { allowed: perms.general_commands, reason: "general_commands" };
+}
+
 // ── i18n ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_LANG = "en";
@@ -154,25 +234,81 @@ const LANG_INSTRUCTIONS = {
 };
 
 function buildSystemPrompt(lang) {
-  return `You are NARE (Notification & Automated Reporting Engine), a helpful Linux system assistant communicating via Telegram.
+  const perms = loadPermissions();
+  const allowed = [];
+  const denied = [];
 
-You help the user manage their Linux system through natural language commands. You can:
-- Check system status (disk, memory, processes, network)
-- Install/remove packages
-- Manage systemd services
-- Read system logs
-- Run safe system commands
+  // Categorize permissions
+  if (perms.install_packages) allowed.push("install packages (pacman -S, yay -S)");
+  else denied.push("install packages");
+  if (perms.remove_packages) allowed.push("remove packages (pacman -R, yay -R)");
+  else denied.push("remove packages");
+  if (perms.system_update) allowed.push("system update (pacman -Syu)");
+  else denied.push("system update");
+  if (perms.manage_services) allowed.push("manage services (systemctl start/stop/enable/disable)");
+  else denied.push("manage services");
+  if (perms.general_commands) allowed.push("run other shell commands (including sudo)");
+  else denied.push("other shell commands / sudo");
+
+  return `You are NARE (Notification & Automated Reporting Engine), a helpful Linux system assistant communicating via Telegram.
 
 System Information:
 ${SYSTEM_INFO}
 
-Rules:
+## Command Execution
+To run a command, wrap it in <cmd> tags. The system will execute it and return the output.
+Example: <cmd>df -h /</cmd>
+
+ALWAYS AUTO-ALLOWED (no permission needed):
+- System info: df, free, ps, uptime, uname, hostname, lscpu, lsblk, top -b
+- Network: nmcli, ip addr/link/route
+- Logs: journalctl
+- Packages list: pacman -Q
+- File reading: cat /etc/*, head, tail, wc
+- Identity: whoami, id, date
+
+PRE-APPROVED by user:
+${allowed.length ? allowed.map(a => `- ${a}`).join("\n") : "- (none)"}
+
+NOT APPROVED (do NOT attempt these):
+${denied.length ? denied.map(d => `- ${d}`).join("\n") : "- (none)"}
+
+ALWAYS BLOCKED (never execute):
+- rm -rf /, dd, mkfs, fork bombs, chmod 777 /, init, reboot, shutdown, halt, poweroff
+
+## Rules
+- When you need system information, USE <cmd> tags to get real data — do NOT guess or ask the user to run commands manually
 - Keep responses concise (Telegram messages should be brief)
-- For destructive commands (rm, package removal, etc.), always warn and ask for confirmation
-- Never execute: rm -rf /, dd, mkfs, fork bombs, or chmod 777 /
-- Use markdown formatting compatible with Telegram (bold, code blocks)
-- If you need to run a command, show the command and its output
+- Use Telegram-compatible markdown (bold, code blocks)
+- For NOT APPROVED commands: tell the user to enable the permission in the NARE Settings panel
 - ${LANG_INSTRUCTIONS[lang] || LANG_INSTRUCTIONS.en}`;
+}
+
+// ── Command tag processor ─────────────────────────────────────────────────
+
+function processCommandTags(text) {
+  const cmdRegex = /<cmd>([\s\S]*?)<\/cmd>/g;
+  let result = text;
+  let match;
+  let executed = false;
+
+  while ((match = cmdRegex.exec(text)) !== null) {
+    const cmd = match[1].trim();
+    const check = isCommandAllowed(cmd);
+
+    let replacement;
+    if (check.allowed) {
+      replacement = executeCommand(cmd);
+      executed = true;
+    } else if (check.reason === "blocked") {
+      replacement = `🚫 *BLOCKED:* \`${cmd}\` is not allowed for safety reasons.`;
+    } else {
+      replacement = `🔒 *Permission needed:* \`${cmd}\`\nEnable "${check.reason}" in NARE Settings panel.`;
+    }
+    result = result.replace(match[0], replacement);
+  }
+
+  return { text: result, executed };
 }
 
 // ── Output helpers ─────────────────────────────────────────────────────────
@@ -266,10 +402,37 @@ async function callAI(chatId, userMessage) {
   try {
     const lang = getLang(chatId);
     const systemPrompt = buildSystemPrompt(lang);
-    const response = AI_PROVIDER === "deepseek"
+    const MAX_ROUNDS = 3; // max command execution rounds per message
+
+    let response = AI_PROVIDER === "deepseek"
       ? await deepseekRequest(history, systemPrompt)
       : await claudeCliRequest(history, systemPrompt);
-    // Add assistant response to history
+
+    // Process <cmd> tags — loop so AI can see output and do follow-ups
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const { text, executed } = processCommandTags(response);
+      response = text;
+      if (!executed) break; // no commands were executed, done
+
+      // Feed command output back to AI for analysis (only if more rounds left)
+      if (round < MAX_ROUNDS - 1 && /<cmd>/.test(response) === false) {
+        // AI already has a complete response with inline outputs, done
+        break;
+      }
+
+      // If the processed text still has <cmd> tags, do another round
+      if (/<cmd>/.test(response)) {
+        history.push({ role: "assistant", content: response });
+        response = AI_PROVIDER === "deepseek"
+          ? await deepseekRequest(history, systemPrompt)
+          : await claudeCliRequest(history, systemPrompt);
+      }
+    }
+
+    // Clean up any remaining <cmd> tags that weren't processed
+    response = response.replace(/<\/?cmd>/g, "");
+
+    // Add final response to history
     history.push({ role: "assistant", content: response });
     return response;
   } catch (e) {

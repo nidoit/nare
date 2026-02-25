@@ -14,6 +14,14 @@ interface ConfigInfo {
   messenger: string | null;
 }
 
+interface Permissions {
+  install_packages: boolean;
+  remove_packages: boolean;
+  system_update: boolean;
+  manage_services: boolean;
+  general_commands: boolean;
+}
+
 export default function App() {
   const { t, lang, setLang } = useI18n();
   const [status, setStatus] = useState<SetupStatus | null>(null);
@@ -22,6 +30,14 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [perms, setPerms] = useState<Permissions>({
+    install_packages: false,
+    remove_packages: false,
+    system_update: false,
+    manage_services: false,
+    general_commands: false,
+  });
+  const [permsSaved, setPermsSaved] = useState(false);
 
   useEffect(() => {
     invoke<SetupStatus>("check_setup_status").then(setStatus);
@@ -30,6 +46,7 @@ export default function App() {
   useEffect(() => {
     if (showSettings) {
       invoke<ConfigInfo>("get_config_info").then(setConfig);
+      invoke<Permissions>("get_permissions").then(setPerms);
     }
   }, [showSettings]);
 
@@ -60,6 +77,17 @@ export default function App() {
     } catch (e) {
       setApiKeyError(String(e));
     }
+  }
+
+  async function handlePermToggle(key: keyof Permissions) {
+    const updated = { ...perms, [key]: !perms[key] };
+    setPerms(updated);
+    setPermsSaved(false);
+    try {
+      await invoke("save_permissions", { permissions: updated });
+      setPermsSaved(true);
+      setTimeout(() => setPermsSaved(false), 2000);
+    } catch {}
   }
 
   if (!status) {
@@ -170,6 +198,40 @@ export default function App() {
               <option value="sv">Svenska</option>
             </select>
           </div>
+        </div>
+
+        <div className="settings-section">
+          <h3>{t("perm.title")}</h3>
+          <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: 12 }}>
+            {t("perm.desc")}
+          </p>
+          <p style={{ fontSize: "11px", color: "var(--green)", marginBottom: 14 }}>
+            {t("perm.safeNote")}
+          </p>
+          {([
+            ["install_packages", "perm.install", "perm.installDesc"],
+            ["remove_packages", "perm.remove", "perm.removeDesc"],
+            ["system_update", "perm.update", "perm.updateDesc"],
+            ["manage_services", "perm.services", "perm.servicesDesc"],
+            ["general_commands", "perm.general", "perm.generalDesc"],
+          ] as const).map(([key, labelKey, descKey]) => (
+            <label key={key} className="perm-row">
+              <input
+                type="checkbox"
+                checked={perms[key as keyof Permissions]}
+                onChange={() => handlePermToggle(key as keyof Permissions)}
+              />
+              <span className="perm-info">
+                <span className="perm-label">{t(labelKey)}</span>
+                <span className="perm-desc">{t(descKey)}</span>
+              </span>
+            </label>
+          ))}
+          {permsSaved && (
+            <p style={{ color: "var(--green)", fontSize: "12px", marginTop: 8 }}>
+              {t("perm.saved")}
+            </p>
+          )}
         </div>
 
         <div className="settings-section settings-danger">
