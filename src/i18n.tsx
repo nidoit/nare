@@ -45,7 +45,7 @@ const strings = {
 
   // DeepSeek API
   "ai.deepseekTitle":     { ko: "DeepSeek API 키", sv: "DeepSeek API-nyckel" },
-  "ai.deepseekDesc":      { ko: "DeepSeek API 키를 입력하세요.", sv: "Ange din DeepSeek API-nyckel." },
+  "ai.deepseekInputDesc": { ko: "DeepSeek API 키를 입력하세요.", sv: "Ange din DeepSeek API-nyckel." },
   "ai.deepseekStep1":     { ko: "에 접속하세요", sv: "Gå till" },
   "ai.deepseekStep2":     { ko: "새 API 키를 생성하세요", sv: "Skapa en ny API-nyckel" },
   "ai.deepseekStep3":     { ko: "아래에 붙여넣기하세요", sv: "Klistra in den nedan" },

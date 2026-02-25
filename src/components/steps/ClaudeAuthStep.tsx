@@ -157,7 +157,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
     <div className="step">
       <div className="step-icon">🔮</div>
       <h1>{t("ai.deepseekTitle")}</h1>
-      <p>{t("ai.deepseekDesc")}</p>
+      <p>{t("ai.deepseekInputDesc")}</p>
 
       <div className="auth-state">
         <div className="telegram-instructions">
