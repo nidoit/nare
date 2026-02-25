@@ -173,7 +173,7 @@ async function callAI(chatId, userMessage) {
   try {
     const response = AI_PROVIDER === "deepseek"
       ? await deepseekRequest(history)
-      : await claudeCliRequest(userMessage);
+      : await claudeCliRequest(history);
     // Add assistant response to history
     history.push({ role: "assistant", content: response });
     return response;
@@ -184,11 +184,20 @@ async function callAI(chatId, userMessage) {
 
 // ── Claude CLI (PRO/MAX via OAuth) ──────────────────────────────────────────
 
-function claudeCliRequest(message) {
+function claudeCliRequest(history) {
   return new Promise((resolve, reject) => {
     try {
-      // Build prompt with system context
-      const prompt = `${SYSTEM_PROMPT}\n\nUser message:\n${message}`;
+      // Build prompt with system context and full conversation history
+      let conversationText = "";
+      for (const msg of history) {
+        if (msg.role === "user") {
+          conversationText += `Human: ${msg.content}\n\n`;
+        } else if (msg.role === "assistant") {
+          conversationText += `Assistant: ${msg.content}\n\n`;
+        }
+      }
+
+      const prompt = `${SYSTEM_PROMPT}\n\nConversation so far:\n${conversationText}Respond to the latest human message.`;
 
       const output = execFileSync("claude", [
         "-p", prompt,
