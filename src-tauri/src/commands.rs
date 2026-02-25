@@ -30,6 +30,15 @@ pub struct SetupStatus {
     pub messenger_configured: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Permissions {
+    pub install_packages: bool,
+    pub remove_packages: bool,
+    pub system_update: bool,
+    pub manage_services: bool,
+    pub general_commands: bool,
+}
+
 // ── Commands ───────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -122,6 +131,32 @@ pub struct ConfigInfo {
     pub api_key_set: bool,
     pub provider: Option<String>,
     pub messenger: Option<String>,
+}
+
+/// Get command permissions.
+#[tauri::command]
+pub fn get_permissions() -> Permissions {
+    let path = config_dir().join("permissions.json");
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Permissions {
+            install_packages: false,
+            remove_packages: false,
+            system_update: false,
+            manage_services: false,
+            general_commands: false,
+        })
+}
+
+/// Save command permissions.
+#[tauri::command]
+pub fn save_permissions(permissions: Permissions) -> Result<(), String> {
+    let dir = config_dir();
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&permissions).map_err(|e| e.to_string())?;
+    fs::write(dir.join("permissions.json"), json).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Open embedded webview to claude.ai for login.

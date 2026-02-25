@@ -114,6 +114,22 @@ const strings = {
   "app.resetDesc":        { en: "Delete all settings and restart the setup wizard.", ko: "모든 설정을 삭제하고 설정 마법사를 다시 시작합니다.", sv: "Ta bort alla inställningar och starta om installationsguiden." },
   "app.language":         { en: "Language", ko: "언어", sv: "Språk" },
   "app.langLabel":        { en: "Language:", ko: "언어:", sv: "Språk:" },
+
+  // ── Permissions ─────────────────────────────────────────────────
+  "perm.title":           { en: "Command Permissions", ko: "명령 권한", sv: "Kommandorättigheter" },
+  "perm.desc":            { en: "Pre-approve command categories so AI can execute them automatically without asking each time.", ko: "명령 카테고리를 미리 승인하면 AI가 매번 묻지 않고 자동으로 실행합니다.", sv: "Förhandsgodkänn kommandokategorier så att AI kan köra dem automatiskt utan att fråga varje gång." },
+  "perm.safeNote":        { en: "System info commands (disk, memory, processes, logs, network) are always allowed.", ko: "시스템 정보 명령 (디스크, 메모리, 프로세스, 로그, 네트워크)은 항상 허용됩니다.", sv: "Systeminfokommandon (disk, minne, processer, loggar, nätverk) är alltid tillåtna." },
+  "perm.install":         { en: "Install packages", ko: "패키지 설치", sv: "Installera paket" },
+  "perm.installDesc":     { en: "pacman -S, yay -S", ko: "pacman -S, yay -S", sv: "pacman -S, yay -S" },
+  "perm.remove":          { en: "Remove packages", ko: "패키지 제거", sv: "Ta bort paket" },
+  "perm.removeDesc":      { en: "pacman -R, yay -R", ko: "pacman -R, yay -R", sv: "pacman -R, yay -R" },
+  "perm.update":          { en: "System update", ko: "시스템 업데이트", sv: "Systemuppdatering" },
+  "perm.updateDesc":      { en: "pacman -Syu, yay -Syu", ko: "pacman -Syu, yay -Syu", sv: "pacman -Syu, yay -Syu" },
+  "perm.services":        { en: "Manage services", ko: "서비스 관리", sv: "Hantera tjänster" },
+  "perm.servicesDesc":    { en: "systemctl start/stop/enable/disable", ko: "systemctl start/stop/enable/disable", sv: "systemctl start/stop/enable/disable" },
+  "perm.general":         { en: "Other commands", ko: "기타 명령", sv: "Övriga kommandon" },
+  "perm.generalDesc":     { en: "Any other shell command (sudo included)", ko: "기타 쉘 명령 (sudo 포함)", sv: "Alla andra skalkommandon (inklusive sudo)" },
+  "perm.saved":           { en: "Permissions saved", ko: "권한이 저장되었습니다", sv: "Rättigheter sparade" },
 } as const;
 
 type StringKey = keyof typeof strings;

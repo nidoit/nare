@@ -2,7 +2,7 @@ mod commands;
 
 use commands::{
     check_setup_status, open_claude_login, save_api_key, save_provider_choice,
-    reset_setup, get_config_info, start_services,
+    reset_setup, get_config_info, get_permissions, save_permissions, start_services,
     start_telegram_bridge, stop_bridge,
     BridgeState,
 };
@@ -24,6 +24,8 @@ pub fn run() {
             save_provider_choice,
             reset_setup,
             get_config_info,
+            get_permissions,
+            save_permissions,
             start_telegram_bridge,
             stop_bridge,
             start_services,
