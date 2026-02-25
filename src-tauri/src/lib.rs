@@ -1,9 +1,9 @@
 mod commands;
 
 use commands::{
-    check_setup_status, open_claude_login, save_api_key, reset_setup,
-    get_config_info, start_services,
-    start_wa_bridge, start_telegram_bridge, stop_bridge,
+    check_setup_status, open_claude_login, save_api_key, save_provider_choice,
+    reset_setup, get_config_info, start_services,
+    start_telegram_bridge, stop_bridge,
     BridgeState,
 };
 use std::io::Write;
@@ -21,9 +21,9 @@ pub fn run() {
             check_setup_status,
             open_claude_login,
             save_api_key,
+            save_provider_choice,
             reset_setup,
             get_config_info,
-            start_wa_bridge,
             start_telegram_bridge,
             stop_bridge,
             start_services,

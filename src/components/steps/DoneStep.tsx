@@ -1,11 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useI18n } from "../../i18n";
 
 interface Props {
   claudeAuthed: boolean;
-  waPhone: string | null;
+  messengerId: string | null;
 }
 
-export default function DoneStep({ claudeAuthed, waPhone }: Props) {
+export default function DoneStep({ claudeAuthed, messengerId }: Props) {
+  const { t } = useI18n();
+
   async function startServices() {
     try {
       await invoke("start_services");
@@ -18,22 +21,24 @@ export default function DoneStep({ claudeAuthed, waPhone }: Props) {
   return (
     <div className="step">
       <div className="step-icon">🎉</div>
-      <h1>설정 완료!</h1>
-      <p>
-        NARE가 설정되었습니다. 메신저로 메시지를 보내서 시스템을 관리하세요.
-      </p>
+      <h1>{t("done.title")}</h1>
+      <p>{t("done.desc")}</p>
 
       <div className="done-details">
         <div className="done-row">
-          <span className="done-key">AI 제공자</span>
-          <span>{claudeAuthed ? "✅ 설정됨" : "⚠️ 미설정"}</span>
+          <span className="done-key">{t("done.provider")}</span>
+          <span>{claudeAuthed ? t("done.configured") : t("done.notConfigured")}</span>
         </div>
         <div className="done-row">
-          <span className="done-key">메신저</span>
-          <span>{waPhone ? `✅ 연결됨 (${waPhone})` : "⚠️ 미연결"}</span>
+          <span className="done-key">{t("done.messenger")}</span>
+          <span>
+            {messengerId
+              ? `${t("done.msgConnected")} (${messengerId})`
+              : t("done.msgNotConnected")}
+          </span>
         </div>
         <div className="done-row">
-          <span className="done-key">설정 파일</span>
+          <span className="done-key">{t("done.configFile")}</span>
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
             ~/.config/nare/config.toml
           </span>
@@ -42,10 +47,10 @@ export default function DoneStep({ claudeAuthed, waPhone }: Props) {
 
       <div className="step-actions">
         <button className="btn btn-primary" onClick={startServices}>
-          NARE 시작 →
+          {t("done.startBtn")}
         </button>
         <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          메신저에서 "디스크 사용량 알려줘"를 보내보세요
+          {t("done.hint")}
         </p>
       </div>
     </div>

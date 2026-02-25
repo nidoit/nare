@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useI18n } from "../../i18n";
 
 type Provider = null | "claude" | "deepseek";
 
@@ -9,25 +11,35 @@ interface Props {
 }
 
 export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
+  const { t } = useI18n();
   const [provider, setProvider] = useState<Provider>(null);
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [claudeLoggingIn, setClaudeLoggingIn] = useState(false);
 
-  function validateKey(key: string, prov: Provider): string | null {
-    if (!key) return "API 키를 입력해주세요";
-    if (prov === "claude" && !key.startsWith("sk-ant-")) {
-      return "올바르지 않은 형식입니다. Anthropic API 키는 'sk-ant-'로 시작합니다";
-    }
-    if (prov === "deepseek" && !key.startsWith("sk-")) {
-      return "올바르지 않은 형식입니다. DeepSeek API 키는 'sk-'로 시작합니다";
+  // Listen for Claude OAuth success event
+  useEffect(() => {
+    const unlisten = listen("claude-auth-success", () => {
+      setClaudeLoggingIn(false);
+      // Store provider preference
+      invoke("save_provider_choice", { provider: "claude" }).catch(() => {});
+      onAuthed();
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [onAuthed]);
+
+  function validateKey(key: string): string | null {
+    if (!key) return t("ai.keyRequired");
+    if (!key.startsWith("sk-")) {
+      return t("ai.keyInvalidDs");
     }
     return null;
   }
 
   async function handleSaveKey() {
     const key = apiKey.trim();
-    const err = validateKey(key, provider);
+    const err = validateKey(key);
     if (err) {
       setError(err);
       return;
@@ -36,7 +48,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
     setError(null);
     setLoading(true);
     try {
-      await invoke("save_api_key", { provider, key });
+      await invoke("save_api_key", { provider: "deepseek", key });
       onAuthed();
     } catch (e) {
       setError(String(e));
@@ -45,13 +57,24 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
     }
   }
 
+  async function handleClaudeLogin() {
+    setClaudeLoggingIn(true);
+    setError(null);
+    try {
+      await invoke("open_claude_login");
+    } catch (e) {
+      setError(String(e));
+      setClaudeLoggingIn(false);
+    }
+  }
+
   if (authed) {
     return (
       <div className="step">
         <div className="step-icon">🔑</div>
-        <h1>AI 제공자</h1>
+        <h1>{t("ai.title")}</h1>
         <div className="auth-state">
-          <span className="status-badge success">✓ API 키 설정됨</span>
+          <span className="status-badge success">{t("ai.keyConfigured")}</span>
         </div>
       </div>
     );
@@ -63,81 +86,95 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
     return (
       <div className="step">
         <div className="step-icon">🤖</div>
-        <h1>AI 제공자 선택</h1>
-        <p>NARE가 사용할 AI를 선택하세요.</p>
+        <h1>{t("ai.selectTitle")}</h1>
+        <p>{t("ai.selectDesc")}</p>
 
         <div className="messenger-cards">
           <button className="messenger-card" onClick={() => setProvider("claude")}>
             <div className="messenger-card-icon">🧠</div>
             <div className="messenger-card-info">
               <strong>Claude</strong>
-              <span className="messenger-card-badge">Pro/Max</span>
+              <span className="messenger-card-badge">{t("ai.claudeProMax")}</span>
             </div>
-            <p>Anthropic — 최고 성능, 유료 API 키 필요</p>
+            <p>{t("ai.claudeDesc")}</p>
           </button>
 
           <button className="messenger-card" onClick={() => setProvider("deepseek")}>
             <div className="messenger-card-icon">🔮</div>
             <div className="messenger-card-info">
               <strong>DeepSeek</strong>
-              <span className="messenger-card-badge recommended">저렴</span>
+              <span className="messenger-card-badge recommended">{t("ai.cheapBadge")}</span>
             </div>
-            <p>DeepSeek — 우수한 성능, 저렴한 가격</p>
+            <p>{t("ai.deepseekDesc")}</p>
           </button>
         </div>
       </div>
     );
   }
 
-  // ── API key input ───────────────────────────────────────────────────
+  // ── Claude: OAuth web login ─────────────────────────────────────────
 
-  const isClaude = provider === "claude";
+  if (provider === "claude") {
+    return (
+      <div className="step">
+        <div className="step-icon">🧠</div>
+        <h1>{t("ai.claudeLoginTitle")}</h1>
+        <p>{t("ai.claudeLoginDesc")}</p>
+
+        <div className="auth-state">
+          {claudeLoggingIn ? (
+            <span className="status-badge loading">
+              <span className="spinner" style={{ width: 12, height: 12 }} />
+              {t("ai.claudeLoginWait")}
+            </span>
+          ) : (
+            <button className="btn btn-primary" onClick={handleClaudeLogin}>
+              {t("ai.claudeLoginBtn")}
+            </button>
+          )}
+
+          {error && (
+            <p style={{ color: "var(--red)", fontSize: "12px", marginTop: 8 }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            className="btn btn-ghost"
+            onClick={() => { setProvider(null); setError(null); }}
+            style={{ marginTop: 8 }}
+          >
+            {t("ai.backToSelect")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DeepSeek: API key input ─────────────────────────────────────────
 
   return (
     <div className="step">
-      <div className="step-icon">{isClaude ? "🧠" : "🔮"}</div>
-      <h1>{isClaude ? "Anthropic API 키" : "DeepSeek API 키"}</h1>
-      <p>
-        {isClaude
-          ? "Claude Pro/Max 전용 — Anthropic API 키가 필요합니다."
-          : "DeepSeek API 키를 입력하세요."}
-      </p>
+      <div className="step-icon">🔮</div>
+      <h1>{t("ai.deepseekTitle")}</h1>
+      <p>{t("ai.deepseekDesc")}</p>
 
       <div className="auth-state">
         <div className="telegram-instructions">
           <ol>
-            {isClaude ? (
-              <>
-                <li>
-                  <a
-                    href="https://console.anthropic.com/settings/keys"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    console.anthropic.com/settings/keys
-                  </a>
-                  에 접속하세요
-                </li>
-                <li>새 API 키를 생성하세요</li>
-              </>
-            ) : (
-              <>
-                <li>
-                  <a
-                    href="https://platform.deepseek.com/api_keys"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    platform.deepseek.com/api_keys
-                  </a>
-                  에 접속하세요
-                </li>
-                <li>새 API 키를 생성하세요</li>
-              </>
-            )}
-            <li>아래에 붙여넣기하세요</li>
+            <li>
+              <a
+                href="https://platform.deepseek.com/api_keys"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "var(--accent)" }}
+              >
+                platform.deepseek.com/api_keys
+              </a>
+              {" "}{t("ai.deepseekStep1")}
+            </li>
+            <li>{t("ai.deepseekStep2")}</li>
+            <li>{t("ai.deepseekStep3")}</li>
           </ol>
         </div>
 
@@ -145,7 +182,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
           <input
             type="password"
             className="token-input"
-            placeholder={isClaude ? "sk-ant-api03-..." : "sk-..."}
+            placeholder="sk-..."
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSaveKey()}
@@ -156,7 +193,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
             onClick={handleSaveKey}
             disabled={loading}
           >
-            {loading ? "저장 중..." : "저장"}
+            {loading ? t("ai.saving") : t("ai.save")}
           </button>
         </div>
 
@@ -167,8 +204,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
         )}
 
         <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: 12 }}>
-          키는 ~/.config/nare/credentials/에 로컬 저장됩니다 (chmod 600).
-          API 호출 외에는 외부로 전송되지 않습니다.
+          {t("ai.credNote")}
         </p>
 
         <button
@@ -176,7 +212,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
           onClick={() => { setProvider(null); setError(null); setApiKey(""); }}
           style={{ marginTop: 8 }}
         >
-          ← 다른 제공자 선택
+          {t("ai.backToSelect")}
         </button>
       </div>
     </div>
