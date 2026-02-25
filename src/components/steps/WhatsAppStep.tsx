@@ -77,7 +77,7 @@ export default function WhatsAppStep({ onConnected }: Props) {
 
   async function startTelegram() {
     if (!token.trim()) {
-      setError("Please enter a bot token");
+      setError("봇 토큰을 입력해주세요");
       return;
     }
     setError(null);
@@ -117,26 +117,26 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">💬</div>
-        <h1>Connect Messenger</h1>
-        <p>Choose how NARE communicates with you.</p>
+        <h1>메신저 연결</h1>
+        <p>NARE가 사용할 메신저를 선택하세요.</p>
 
         <div className="messenger-cards">
           <button className="messenger-card" onClick={chooseTelegram}>
             <div className="messenger-card-icon">✈️</div>
             <div className="messenger-card-info">
               <strong>Telegram</strong>
-              <span className="messenger-card-badge recommended">Recommended</span>
+              <span className="messenger-card-badge recommended">추천</span>
             </div>
-            <p>Official Bot API — reliable, free, easy setup</p>
+            <p>공식 Bot API — 안정적, 무료, 간편한 설정</p>
           </button>
 
           <button className="messenger-card" onClick={chooseWhatsApp}>
             <div className="messenger-card-icon">📱</div>
             <div className="messenger-card-info">
               <strong>WhatsApp</strong>
-              <span className="messenger-card-badge">Unofficial</span>
+              <span className="messenger-card-badge">비공식</span>
             </div>
-            <p>Via Baileys — requires QR scan, may disconnect</p>
+            <p>Baileys 사용 — QR 스캔 필요, 연결 끊길 수 있음</p>
           </button>
         </div>
       </div>
@@ -149,17 +149,16 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">✈️</div>
-        <h1>Telegram Bot Setup</h1>
+        <h1>Telegram 봇 설정</h1>
         <div className="telegram-instructions">
           <ol>
             <li>
-              Open Telegram and message{" "}
-              <strong>@BotFather</strong>
+              Telegram에서 <strong>@BotFather</strong>에게 메시지를 보내세요
             </li>
             <li>
-              Send <code>/newbot</code> and follow the prompts
+              <code>/newbot</code>을 보내고 안내를 따르세요
             </li>
-            <li>Copy the bot token and paste it below</li>
+            <li>봇 토큰을 복사해서 아래에 붙여넣기하세요</li>
           </ol>
         </div>
 
@@ -174,7 +173,7 @@ export default function WhatsAppStep({ onConnected }: Props) {
             autoFocus
           />
           <button className="btn btn-primary" onClick={startTelegram}>
-            Connect
+            연결
           </button>
         </div>
 
@@ -185,7 +184,7 @@ export default function WhatsAppStep({ onConnected }: Props) {
         )}
 
         <button className="btn btn-ghost" onClick={backToChoice} style={{ marginTop: 12 }}>
-          ← Back
+          ← 돌아가기
         </button>
       </div>
     );
@@ -197,11 +196,11 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">{messenger === "telegram" ? "✈️" : "📱"}</div>
-        <h1>{messenger === "telegram" ? "Connecting to Telegram..." : "Starting WhatsApp..."}</h1>
+        <h1>{messenger === "telegram" ? "Telegram 연결 중..." : "WhatsApp 시작 중..."}</h1>
         <div className="step-actions">
           <span className="status-badge loading">
             <span className="spinner" style={{ width: 12, height: 12 }} />
-            {messenger === "telegram" ? "Validating bot token..." : "Starting bridge..."}
+            {messenger === "telegram" ? "봇 토큰 확인 중..." : "브릿지 시작 중..."}
           </span>
         </div>
       </div>
@@ -214,25 +213,24 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">✈️</div>
-        <h1>Send /start to your bot</h1>
+        <h1>봇에게 /start를 보내세요</h1>
         {botUsername && (
           <p>
-            Open Telegram and message{" "}
-            <strong>@{botUsername}</strong>
+            Telegram에서 <strong>@{botUsername}</strong>에게 메시지를 보내세요
           </p>
         )}
         <div className="telegram-instructions">
           <ol>
-            <li>Open Telegram on your phone or desktop</li>
-            <li>Find your bot: <strong>@{botUsername || "your_bot"}</strong></li>
-            <li>Send <code>/start</code> to connect</li>
+            <li>핸드폰이나 PC에서 Telegram을 여세요</li>
+            <li>봇을 찾으세요: <strong>@{botUsername || "your_bot"}</strong></li>
+            <li><code>/start</code>를 보내서 연결하세요</li>
           </ol>
         </div>
         <div className="step-actions">
-          <span className="status-badge waiting">Waiting for /start...</span>
+          <span className="status-badge waiting">/start 대기 중...</span>
         </div>
         <button className="btn btn-ghost" onClick={backToChoice} style={{ marginTop: 12 }}>
-          ← Back
+          ← 돌아가기
         </button>
       </div>
     );
@@ -244,23 +242,23 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">📱</div>
-        <h1>Scan QR Code</h1>
+        <h1>QR 코드 스캔</h1>
         <div className="qr-container">
           <img src={qrDataUrl} alt="WhatsApp QR Code" />
         </div>
         <div className="qr-instructions">
           <ol>
-            <li>Open WhatsApp on your phone</li>
-            <li>Tap Menu (⋮) → Linked Devices</li>
-            <li>Tap "Link a Device"</li>
-            <li>Point your camera at the QR code above</li>
+            <li>핸드폰에서 WhatsApp을 여세요</li>
+            <li>메뉴(⋮) → 연결된 기기를 누르세요</li>
+            <li>"기기 연결"을 누르세요</li>
+            <li>위의 QR 코드에 카메라를 맞추세요</li>
           </ol>
         </div>
         <div className="step-actions">
-          <span className="status-badge waiting">Waiting for scan...</span>
+          <span className="status-badge waiting">스캔 대기 중...</span>
         </div>
         <button className="btn btn-ghost" onClick={backToChoice} style={{ marginTop: 12 }}>
-          ← Back
+          ← 돌아가기
         </button>
       </div>
     );
@@ -272,10 +270,10 @@ export default function WhatsAppStep({ onConnected }: Props) {
     return (
       <div className="step">
         <div className="step-icon">{messenger === "telegram" ? "✈️" : "📱"}</div>
-        <h1>{messenger === "telegram" ? "Telegram Connected" : "WhatsApp Connected"}</h1>
+        <h1>{messenger === "telegram" ? "Telegram 연결 완료" : "WhatsApp 연결 완료"}</h1>
         <div className="step-actions">
           <span className="status-badge success">
-            ✓ Connected{connectedId ? ` — ${messenger === "telegram" ? "Chat " : "+"}${connectedId}` : ""}
+            ✓ 연결됨{connectedId ? ` — ${messenger === "telegram" ? "Chat " : "+"}${connectedId}` : ""}
           </span>
         </div>
       </div>
@@ -287,11 +285,11 @@ export default function WhatsAppStep({ onConnected }: Props) {
   return (
     <div className="step">
       <div className="step-icon">⚠️</div>
-      <h1>Connection Error</h1>
+      <h1>연결 오류</h1>
       <div className="step-actions">
         <p style={{ color: "var(--red)", fontSize: "12px" }}>{error}</p>
         <button className="btn btn-primary" onClick={backToChoice}>
-          Try Again
+          다시 시도
         </button>
       </div>
     </div>
