@@ -12,6 +12,8 @@ interface ConfigInfo {
   api_key_set: boolean;
   provider: string | null;
   messenger: string | null;
+  claude_configured: boolean;
+  deepseek_configured: boolean;
 }
 
 interface Permissions {
@@ -122,47 +124,81 @@ export default function App() {
 
         <div className="settings-section">
           <h3>{t("ai.title")}</h3>
-          <div className="settings-row">
-            <span className="settings-label">{t("app.provider")}</span>
-            <span className={`status-badge ${config?.api_key_set ? "success" : "waiting"}`}>
-              {config?.api_key_set
-                ? `✓ ${config?.provider === "deepseek" ? "DeepSeek" : "Claude"}`
-                : t("app.notSet")}
+
+          {/* Provider status & switcher */}
+          <div className="settings-row" style={{ marginBottom: 8 }}>
+            <span className="settings-label">{t("ai.activeProvider")}</span>
+            {(config?.claude_configured && config?.deepseek_configured) ? (
+              <select
+                value={config?.provider || ""}
+                onChange={async (e) => {
+                  await invoke("save_provider_choice", { provider: e.target.value });
+                  invoke<ConfigInfo>("get_config_info").then(setConfig);
+                }}
+                style={{
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "6px 10px",
+                  fontSize: 13,
+                }}
+              >
+                <option value="claude">Claude (PRO/MAX)</option>
+                <option value="deepseek">DeepSeek (API)</option>
+              </select>
+            ) : (
+              <span className={`status-badge ${config?.api_key_set ? "success" : "waiting"}`}>
+                {config?.api_key_set
+                  ? `✓ ${config?.provider === "deepseek" ? "DeepSeek" : "Claude"}`
+                  : t("app.notSet")}
+              </span>
+            )}
+          </div>
+
+          {/* Show configured status for each provider */}
+          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: 8 }}>
+            <span>Claude: </span>
+            <span style={{ color: config?.claude_configured ? "var(--green)" : "var(--text-muted)" }}>
+              {config?.claude_configured ? "✓" : "—"}
+            </span>
+            <span style={{ margin: "0 12px" }}>|</span>
+            <span>DeepSeek: </span>
+            <span style={{ color: config?.deepseek_configured ? "var(--green)" : "var(--text-muted)" }}>
+              {config?.deepseek_configured ? "✓" : "—"}
             </span>
           </div>
-          {config?.provider === "deepseek" && (
-            <>
-              <div className="token-input-group" style={{ marginTop: 12 }}>
-                <input
-                  type="password"
-                  className="token-input"
-                  placeholder="sk-..."
-                  value={apiKey}
-                  onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
-                />
-                <button className="btn btn-primary" onClick={handleSaveApiKey}>
-                  {t("ai.save")}
-                </button>
-              </div>
-              {apiKeySaved && (
-                <p style={{ color: "var(--green)", fontSize: "12px", marginTop: 6 }}>
-                  {t("app.apiKeySaved")}
-                </p>
-              )}
-              {apiKeyError && (
-                <p style={{ color: "var(--red)", fontSize: "12px", marginTop: 6 }}>
-                  {apiKeyError}
-                </p>
-              )}
-              <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: 8 }}>
-                <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
-                  platform.deepseek.com
-                </a>
-                {" "}{t("app.apiKeyGetFrom")}
-              </p>
-            </>
+
+          {/* DeepSeek API key input (always available) */}
+          <div className="token-input-group" style={{ marginTop: 12 }}>
+            <input
+              type="password"
+              className="token-input"
+              placeholder="sk-... (DeepSeek API key)"
+              value={apiKey}
+              onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+            />
+            <button className="btn btn-primary" onClick={handleSaveApiKey}>
+              {t("ai.save")}
+            </button>
+          </div>
+          {apiKeySaved && (
+            <p style={{ color: "var(--green)", fontSize: "12px", marginTop: 6 }}>
+              {t("app.apiKeySaved")}
+            </p>
           )}
+          {apiKeyError && (
+            <p style={{ color: "var(--red)", fontSize: "12px", marginTop: 6 }}>
+              {apiKeyError}
+            </p>
+          )}
+          <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: 8 }}>
+            <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+              platform.deepseek.com
+            </a>
+            {" "}{t("app.apiKeyGetFrom")}
+          </p>
         </div>
 
         <div className="settings-section">

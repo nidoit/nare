@@ -114,6 +114,12 @@ pub fn get_config_info() -> ConfigInfo {
         _ => false,
     };
 
+    let claude_configured = dir.join("credentials/claude").exists();
+    let deepseek_configured = dir.join("credentials/deepseek").exists()
+        && fs::read_to_string(dir.join("credentials/deepseek"))
+            .map(|k| k.trim().starts_with("sk-"))
+            .unwrap_or(false);
+
     let messenger = fs::read_to_string(dir.join("messenger_configured"))
         .unwrap_or_default()
         .trim()
@@ -123,6 +129,8 @@ pub fn get_config_info() -> ConfigInfo {
         api_key_set,
         provider: if provider.is_empty() { None } else { Some(provider) },
         messenger: if messenger.is_empty() { None } else { Some(messenger) },
+        claude_configured,
+        deepseek_configured,
     }
 }
 
@@ -131,6 +139,8 @@ pub struct ConfigInfo {
     pub api_key_set: bool,
     pub provider: Option<String>,
     pub messenger: Option<String>,
+    pub claude_configured: bool,
+    pub deepseek_configured: bool,
 }
 
 /// Get command permissions.

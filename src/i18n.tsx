@@ -58,7 +58,11 @@ const strings = {
   "ai.save":              { en: "Save", ko: "저장", sv: "Spara" },
   "ai.saving":            { en: "Saving...", ko: "저장 중...", sv: "Sparar..." },
   "ai.credNote":          { en: "The key is stored locally in ~/.config/nare/credentials/ (chmod 600). It is never sent outside the API call.", ko: "키는 ~/.config/nare/credentials/에 로컬 저장됩니다 (chmod 600). API 호출 외에는 외부로 전송되지 않습니다.", sv: "Nyckeln sparas lokalt i ~/.config/nare/credentials/ (chmod 600). Den skickas aldrig utanför API-anropet." },
-  "ai.backToSelect":      { en: "← Choose a different provider", ko: "← 다른 제공자 선택", sv: "← Välj en annan leverantör" },
+  "ai.backToSelect":      { en: "← Back", ko: "← 돌아가기", sv: "← Tillbaka" },
+  "ai.bothHint":          { en: "You can set up both and switch later in Settings.", ko: "둘 다 설정하고 나중에 설정에서 전환할 수 있습니다.", sv: "Du kan konfigurera båda och byta i Inställningar." },
+  "ai.tapToReconfigure":  { en: "Tap to reconfigure", ko: "탭하여 재설정", sv: "Tryck för att konfigurera om" },
+  "ai.activeProvider":    { en: "Active:", ko: "활성:", sv: "Aktiv:" },
+  "ai.switchProvider":    { en: "Switch provider", ko: "제공자 전환", sv: "Byt leverantör" },
 
   // ── Messenger Step (Telegram only) ────────────────────────────────
   "msg.title":            { en: "Connect Telegram", ko: "Telegram 연결", sv: "Anslut Telegram" },
