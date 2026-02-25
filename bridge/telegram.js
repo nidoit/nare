@@ -27,6 +27,8 @@
 
 const https = require("https");
 const { execSync, execFileSync, spawnSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
 const os = require("os");
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -39,26 +41,41 @@ if (!TOKEN) {
 
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || "";
 
-function isClaudeCliAvailable() {
+// Resolve claude CLI binary — check PATH first, then common install locations
+function findClaudeCli() {
+  // 1) Try PATH (works if user's shell profile set it up)
   try {
-    const result = spawnSync("claude", ["--version"], { encoding: "utf8", timeout: 5000 });
-    return result.status === 0;
-  } catch {
-    return false;
+    const result = spawnSync("which", ["claude"], { encoding: "utf8", timeout: 3000 });
+    if (result.status === 0 && result.stdout.trim()) return result.stdout.trim();
+  } catch {}
+
+  // 2) Check common installation paths
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, ".local", "bin", "claude"),
+    path.join(home, ".claude", "local", "claude"),
+    "/usr/local/bin/claude",
+    "/usr/bin/claude",
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
   }
+  return null;
 }
+
+const CLAUDE_BIN = findClaudeCli();
 
 // Auto-detect provider: explicit env > whichever key is set > claude (CLI)
 let AI_PROVIDER = process.env.AI_PROVIDER
   || (DEEPSEEK_KEY ? "deepseek" : "claude");
 
 // Validate the selected provider is actually usable
-if (AI_PROVIDER === "claude" && !isClaudeCliAvailable()) {
+if (AI_PROVIDER === "claude" && !CLAUDE_BIN) {
   if (DEEPSEEK_KEY) {
     AI_PROVIDER = "deepseek";
-    emit({ event: "info", message: "Claude CLI not found, falling back to DeepSeek" });
+    emit({ event: "info", message: "Claude CLI not found in PATH or ~/.local/bin, falling back to DeepSeek" });
   } else {
-    emit({ event: "error", message: "No AI provider available. Either install Claude CLI (curl -fsSL https://claude.ai/install.sh | bash) or configure a DeepSeek API key." });
+    emit({ event: "error", message: "Claude CLI not found. Checked PATH and ~/.local/bin/claude. Install it (curl -fsSL https://claude.ai/install.sh | bash) or configure a DeepSeek API key." });
     process.exit(1);
   }
 } else if (AI_PROVIDER === "deepseek" && !DEEPSEEK_KEY) {
@@ -277,7 +294,7 @@ function claudeCliRequest(history, systemPrompt) {
 
       const prompt = `${systemPrompt}\n\nConversation so far:\n${conversationText}Respond to the latest human message.`;
 
-      const output = execFileSync("claude", [
+      const output = execFileSync(CLAUDE_BIN, [
         "-p", prompt,
         "--output-format", "text",
       ], {
