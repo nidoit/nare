@@ -9,6 +9,7 @@ interface SetupStatus {
 
 interface ConfigInfo {
   api_key_set: boolean;
+  provider: string | null;
   messenger: string | null;
 }
 
@@ -37,24 +38,26 @@ export default function App() {
     setStatus({ claude_configured: false, messenger_configured: false });
   }
 
-  async function handleSaveApiKey() {
+  async function handleSaveApiKey(provider: string) {
     const key = apiKey.trim();
     if (!key) {
       setApiKeyError("API 키를 입력해주세요");
       return;
     }
-    if (!key.startsWith("sk-ant-")) {
+    if (provider === "claude" && !key.startsWith("sk-ant-")) {
       setApiKeyError("올바르지 않은 형식입니다. Anthropic API 키는 'sk-ant-'로 시작합니다");
       return;
     }
+    if (provider === "deepseek" && !key.startsWith("sk-")) {
+      setApiKeyError("올바르지 않은 형식입니다. DeepSeek API 키는 'sk-'로 시작합니다");
+      return;
+    }
     try {
-      await invoke("save_api_key", { key });
+      await invoke("save_api_key", { provider, key });
       setApiKeySaved(true);
       setApiKeyError(null);
       setApiKey("");
-      // Refresh config
       invoke<ConfigInfo>("get_config_info").then(setConfig);
-      // Also update setup status
       invoke<SetupStatus>("check_setup_status").then(setStatus);
     } catch (e) {
       setApiKeyError(String(e));
@@ -92,23 +95,25 @@ export default function App() {
         </div>
 
         <div className="settings-section">
-          <h3>Claude API 키</h3>
+          <h3>AI 제공자</h3>
           <div className="settings-row">
-            <span className="settings-label">상태:</span>
+            <span className="settings-label">제공자:</span>
             <span className={`status-badge ${config?.api_key_set ? "success" : "waiting"}`}>
-              {config?.api_key_set ? "✓ 설정됨" : "설정 안됨"}
+              {config?.api_key_set
+                ? `✓ ${config?.provider === "deepseek" ? "DeepSeek" : "Claude"}`
+                : "설정 안됨"}
             </span>
           </div>
           <div className="token-input-group" style={{ marginTop: 12 }}>
             <input
               type="password"
               className="token-input"
-              placeholder="sk-ant-api03-..."
+              placeholder={config?.provider === "deepseek" ? "sk-..." : "sk-ant-api03-..."}
               value={apiKey}
               onChange={(e) => { setApiKey(e.target.value); setApiKeySaved(false); }}
-              onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey(config?.provider || "claude")}
             />
-            <button className="btn btn-primary" onClick={handleSaveApiKey}>
+            <button className="btn btn-primary" onClick={() => handleSaveApiKey(config?.provider || "claude")}>
               저장
             </button>
           </div>
@@ -123,14 +128,15 @@ export default function App() {
             </p>
           )}
           <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: 8 }}>
-            <a
-              href="https://console.anthropic.com/settings/keys"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "var(--accent)" }}
-            >
-              console.anthropic.com
-            </a>
+            {config?.provider === "deepseek" ? (
+              <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                platform.deepseek.com
+              </a>
+            ) : (
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                console.anthropic.com
+              </a>
+            )}
             에서 API 키를 발급받을 수 있습니다
           </p>
         </div>

@@ -9,7 +9,7 @@ interface Props {
   initialMessengerConfigured: boolean;
 }
 
-const STEPS = ["시작", "Claude", "메신저", "완료"];
+const STEPS = ["시작", "AI", "메신저", "완료"];
 
 export default function SetupWizard({
   initialClaudeConfigured,

@@ -25,7 +25,7 @@ export default function DoneStep({ claudeAuthed, waPhone }: Props) {
 
       <div className="done-details">
         <div className="done-row">
-          <span className="done-key">Claude API</span>
+          <span className="done-key">AI 제공자</span>
           <span>{claudeAuthed ? "✅ 설정됨" : "⚠️ 미설정"}</span>
         </div>
         <div className="done-row">

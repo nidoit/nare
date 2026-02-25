@@ -7,7 +7,9 @@
  *
  * Environment variables:
  *   TELEGRAM_BOT_TOKEN   — Bot token from @BotFather
- *   ANTHROPIC_API_KEY    — Anthropic API key (optional, for AI responses)
+ *   AI_PROVIDER          — "claude" or "deepseek" (default: auto-detect)
+ *   ANTHROPIC_API_KEY    — Anthropic API key (for Claude)
+ *   DEEPSEEK_API_KEY     — DeepSeek API key (for DeepSeek)
  *   NARE_SYSTEM_INFO     — System info string (optional)
  *
  * Outbound events (stdout → Tauri):
@@ -34,7 +36,14 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-const API_KEY = process.env.ANTHROPIC_API_KEY || "";
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || "";
+
+// Auto-detect provider: explicit env > whichever key is set > none
+const AI_PROVIDER = process.env.AI_PROVIDER
+  || (ANTHROPIC_KEY ? "claude" : DEEPSEEK_KEY ? "deepseek" : "none");
+const API_KEY = AI_PROVIDER === "deepseek" ? DEEPSEEK_KEY : ANTHROPIC_KEY;
+
 const API_BASE = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
 let running = true;
@@ -135,15 +144,15 @@ function apiPost(method, body) {
   });
 }
 
-// ── Claude API ─────────────────────────────────────────────────────────────
+// ── AI API ──────────────────────────────────────────────────────────────────
 
 // Per-chat conversation history (last N messages for context)
 const conversations = new Map();
 const MAX_HISTORY = 20;
 
-async function callClaude(chatId, userMessage) {
+async function callAI(chatId, userMessage) {
   if (!API_KEY) {
-    return "I'm connected but no Anthropic API key is configured. Please add your API key in NARE settings to enable AI responses.\n\nYou can get one at: https://console.anthropic.com/settings/keys";
+    return "AI API 키가 설정되지 않았습니다. NARE 설정에서 API 키를 추가해주세요.";
   }
 
   // Get or create conversation history
@@ -167,14 +176,18 @@ async function callClaude(chatId, userMessage) {
   }
 
   try {
-    const response = await claudeRequest(history);
+    const response = AI_PROVIDER === "deepseek"
+      ? await deepseekRequest(history)
+      : await claudeRequest(history);
     // Add assistant response to history
     history.push({ role: "assistant", content: response });
     return response;
   } catch (e) {
-    return `Error calling Claude API: ${e.message}`;
+    return `AI API 오류: ${e.message}`;
   }
 }
+
+// ── Claude (Anthropic) ──────────────────────────────────────────────────────
 
 function claudeRequest(messages) {
   return new Promise((resolve, reject) => {
@@ -207,6 +220,62 @@ function claudeRequest(messages) {
             reject(new Error(json.error.message || JSON.stringify(json.error)));
           } else if (json.content && json.content[0]) {
             resolve(json.content[0].text);
+          } else {
+            reject(new Error(`Unexpected response: ${data.slice(0, 300)}`));
+          }
+        } catch (e) {
+          reject(new Error(`Parse error: ${data.slice(0, 300)}`));
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.setTimeout(120000, () => {
+      req.destroy();
+      reject(new Error("Request timed out (120s)"));
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
+// ── DeepSeek (OpenAI-compatible) ────────────────────────────────────────────
+
+function deepseekRequest(messages) {
+  return new Promise((resolve, reject) => {
+    // DeepSeek uses OpenAI-compatible format with system as a message
+    const fullMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...messages,
+    ];
+
+    const payload = JSON.stringify({
+      model: "deepseek-chat",
+      max_tokens: 1024,
+      messages: fullMessages,
+    });
+
+    const options = {
+      hostname: "api.deepseek.com",
+      path: "/v1/chat/completions",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Length": Buffer.byteLength(payload),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.error) {
+            reject(new Error(json.error.message || JSON.stringify(json.error)));
+          } else if (json.choices && json.choices[0] && json.choices[0].message) {
+            resolve(json.choices[0].message.content);
           } else {
             reject(new Error(`Unexpected response: ${data.slice(0, 300)}`));
           }
@@ -342,7 +411,7 @@ async function poll() {
           // Process with AI (send typing indicator first)
           await apiPost("sendChatAction", { chat_id: chatId, action: "typing" });
 
-          const reply = await callClaude(chatId, text);
+          const reply = await callAI(chatId, text);
 
           // Send response (split if too long for Telegram's 4096 char limit)
           const chunks = splitMessage(reply, 4000);
@@ -426,9 +495,10 @@ async function handleCommand(cmd) {
   await validateToken();
   emit({ event: "waiting", message: "Send /start to the bot on Telegram to connect" });
   if (API_KEY) {
-    emit({ event: "info", message: "AI responses enabled (Claude API)" });
+    const providerName = AI_PROVIDER === "deepseek" ? "DeepSeek" : "Claude";
+    emit({ event: "info", message: `AI responses enabled (${providerName})` });
   } else {
-    emit({ event: "info", message: "No API key — AI responses disabled. Set Anthropic API key to enable." });
+    emit({ event: "info", message: "No API key — AI responses disabled. Set API key to enable." });
   }
   poll().catch((err) => {
     emit({ event: "error", message: String(err) });

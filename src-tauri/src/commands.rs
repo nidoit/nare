@@ -37,19 +37,35 @@ pub struct SetupStatus {
 #[tauri::command]
 pub fn check_setup_status() -> SetupStatus {
     let dir = config_dir();
+    let claude_configured = dir.join("credentials/claude").exists()
+        || dir.join("credentials/deepseek").exists();
     SetupStatus {
-        claude_configured: dir.join("credentials/claude").exists(),
+        claude_configured,
         messenger_configured: dir.join("messenger_configured").exists(),
     }
 }
 
-/// Save the Anthropic API key securely.
+/// Save an AI provider API key securely.
 #[tauri::command]
-pub fn save_api_key(key: String) -> Result<(), String> {
+pub fn save_api_key(provider: String, key: String) -> Result<(), String> {
     let creds_dir = config_dir().join("credentials");
     fs::create_dir_all(&creds_dir).map_err(|e| e.to_string())?;
-    let path = creds_dir.join("claude");
+
+    let filename = match provider.as_str() {
+        "deepseek" => "deepseek",
+        _ => "claude",
+    };
+    let path = creds_dir.join(filename);
     fs::write(&path, &key).map_err(|e| e.to_string())?;
+
+    // Store the chosen provider
+    fs::write(creds_dir.join("provider"), &provider).map_err(|e| e.to_string())?;
+
+    // Remove the other provider's key to avoid confusion
+    match provider.as_str() {
+        "deepseek" => { let _ = fs::remove_file(creds_dir.join("claude")); }
+        _ => { let _ = fs::remove_file(creds_dir.join("deepseek")); }
+    }
 
     // chmod 600
     #[cfg(unix)]
@@ -66,6 +82,8 @@ pub fn save_api_key(key: String) -> Result<(), String> {
 pub fn reset_setup() -> Result<(), String> {
     let dir = config_dir();
     let _ = fs::remove_file(dir.join("credentials/claude"));
+    let _ = fs::remove_file(dir.join("credentials/deepseek"));
+    let _ = fs::remove_file(dir.join("credentials/provider"));
     let _ = fs::remove_file(dir.join("messenger_configured"));
     let _ = fs::remove_file(dir.join("config.toml"));
     let _ = fs::remove_dir_all(dir.join("whatsapp/session"));
@@ -77,10 +95,21 @@ pub fn reset_setup() -> Result<(), String> {
 pub fn get_config_info() -> ConfigInfo {
     let dir = config_dir();
 
-    let api_key_set = dir.join("credentials/claude").exists()
-        && fs::read_to_string(dir.join("credentials/claude"))
-            .map(|k| k.trim().starts_with("sk-ant-"))
-            .unwrap_or(false);
+    let provider = fs::read_to_string(dir.join("credentials/provider"))
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    let api_key_set = match provider.as_str() {
+        "deepseek" => dir.join("credentials/deepseek").exists()
+            && fs::read_to_string(dir.join("credentials/deepseek"))
+                .map(|k| k.trim().starts_with("sk-"))
+                .unwrap_or(false),
+        _ => dir.join("credentials/claude").exists()
+            && fs::read_to_string(dir.join("credentials/claude"))
+                .map(|k| k.trim().starts_with("sk-ant-"))
+                .unwrap_or(false),
+    };
 
     let messenger = fs::read_to_string(dir.join("messenger_configured"))
         .unwrap_or_default()
@@ -89,6 +118,7 @@ pub fn get_config_info() -> ConfigInfo {
 
     ConfigInfo {
         api_key_set,
+        provider: if provider.is_empty() { None } else { Some(provider) },
         messenger: if messenger.is_empty() { None } else { Some(messenger) },
     }
 }
@@ -96,6 +126,7 @@ pub fn get_config_info() -> ConfigInfo {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigInfo {
     pub api_key_set: bool,
+    pub provider: Option<String>,
     pub messenger: Option<String>,
 }
 
@@ -181,14 +212,23 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
     let script = bridge_dir.join("telegram.js");
     fs::write(&script, BRIDGE_TG_JS).map_err(|e| format!("Failed to write telegram.js: {e}"))?;
 
-    // Read API key if available
-    let api_key = fs::read_to_string(config_dir().join("credentials/claude")).unwrap_or_default();
+    // Read provider and API key
+    let provider = fs::read_to_string(config_dir().join("credentials/provider"))
+        .unwrap_or_else(|_| "claude".to_string());
+    let provider = provider.trim().to_string();
+
+    let api_key = match provider.as_str() {
+        "deepseek" => fs::read_to_string(config_dir().join("credentials/deepseek")).unwrap_or_default(),
+        _ => fs::read_to_string(config_dir().join("credentials/claude")).unwrap_or_default(),
+    };
 
     // Spawn — no npm install needed, uses built-in https
     let mut child = Command::new("node")
         .arg(&script)
         .env("TELEGRAM_BOT_TOKEN", &token)
-        .env("ANTHROPIC_API_KEY", api_key.trim())
+        .env("AI_PROVIDER", &provider)
+        .env("ANTHROPIC_API_KEY", if provider == "claude" { api_key.trim() } else { "" })
+        .env("DEEPSEEK_API_KEY", if provider == "deepseek" { api_key.trim() } else { "" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -394,12 +434,16 @@ fn write_messenger_config(messenger: &str, id: &str) {
     // Mark messenger as configured
     let _ = fs::write(dir.join("messenger_configured"), messenger);
 
+    // Read chosen AI provider
+    let provider = fs::read_to_string(dir.join("credentials/provider"))
+        .unwrap_or_else(|_| "claude".to_string());
+    let provider = provider.trim();
+
     let content = match messenger {
         "telegram" => format!(
             r#"[ai_agent]
 enabled          = true
-provider         = "claude"
-claude_mode      = "oauth"
+provider         = "{provider}"
 messenger        = "telegram"
 language         = "auto"
 safe_mode        = true
@@ -418,8 +462,7 @@ session_timeout  = 3600
             format!(
                 r#"[ai_agent]
 enabled          = true
-provider         = "claude"
-claude_mode      = "oauth"
+provider         = "{provider}"
 messenger        = "whatsapp"
 language         = "auto"
 safe_mode        = true
