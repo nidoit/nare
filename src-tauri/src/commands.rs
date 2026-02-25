@@ -43,6 +43,24 @@ pub fn check_setup_status() -> SetupStatus {
     }
 }
 
+/// Save the Anthropic API key securely.
+#[tauri::command]
+pub fn save_api_key(key: String) -> Result<(), String> {
+    let creds_dir = config_dir().join("credentials");
+    fs::create_dir_all(&creds_dir).map_err(|e| e.to_string())?;
+    let path = creds_dir.join("claude");
+    fs::write(&path, &key).map_err(|e| e.to_string())?;
+
+    // chmod 600
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+
+    Ok(())
+}
+
 /// Open embedded webview to claude.ai for login.
 /// Uses both on_navigation and URL polling to detect post-login SPA navigations.
 #[tauri::command]
@@ -125,10 +143,14 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
     let script = bridge_dir.join("telegram.js");
     fs::write(&script, BRIDGE_TG_JS).map_err(|e| format!("Failed to write telegram.js: {e}"))?;
 
+    // Read API key if available
+    let api_key = fs::read_to_string(config_dir().join("credentials/claude")).unwrap_or_default();
+
     // Spawn — no npm install needed, uses built-in https
     let mut child = Command::new("node")
         .arg(&script)
         .env("TELEGRAM_BOT_TOKEN", &token)
+        .env("ANTHROPIC_API_KEY", api_key.trim())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

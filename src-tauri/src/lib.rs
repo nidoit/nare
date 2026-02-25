@@ -1,7 +1,7 @@
 mod commands;
 
 use commands::{
-    check_setup_status, open_claude_login, start_services,
+    check_setup_status, open_claude_login, save_api_key, start_services,
     start_wa_bridge, start_telegram_bridge, stop_bridge,
     BridgeState,
 };
@@ -19,6 +19,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_setup_status,
             open_claude_login,
+            save_api_key,
             start_wa_bridge,
             start_telegram_bridge,
             stop_bridge,
