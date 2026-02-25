@@ -9,7 +9,7 @@ interface Props {
   initialMessengerConfigured: boolean;
 }
 
-const STEPS = ["Welcome", "Claude", "Messenger", "Done"];
+const STEPS = ["시작", "Claude", "메신저", "완료"];
 
 export default function SetupWizard({
   initialClaudeConfigured,
@@ -74,7 +74,7 @@ export default function SetupWizard({
       <div className="wizard-footer">
         {step > 0 && step < STEPS.length - 1 && (
           <button className="btn btn-ghost" onClick={back}>
-            ← Back
+            ← 이전
           </button>
         )}
         {step < STEPS.length - 1 && (
@@ -86,7 +86,7 @@ export default function SetupWizard({
               (step === 2 && !messengerId)
             }
           >
-            {step === STEPS.length - 2 ? "Finish →" : "Next →"}
+            {step === STEPS.length - 2 ? "완료 →" : "다음 →"}
           </button>
         )}
       </div>

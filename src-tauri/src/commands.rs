@@ -61,6 +61,44 @@ pub fn save_api_key(key: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Reset all setup state so the wizard runs again.
+#[tauri::command]
+pub fn reset_setup() -> Result<(), String> {
+    let dir = config_dir();
+    let _ = fs::remove_file(dir.join("credentials/claude"));
+    let _ = fs::remove_file(dir.join("messenger_configured"));
+    let _ = fs::remove_file(dir.join("config.toml"));
+    let _ = fs::remove_dir_all(dir.join("whatsapp/session"));
+    Ok(())
+}
+
+/// Get current configuration info for the settings view.
+#[tauri::command]
+pub fn get_config_info() -> ConfigInfo {
+    let dir = config_dir();
+
+    let api_key_set = dir.join("credentials/claude").exists()
+        && fs::read_to_string(dir.join("credentials/claude"))
+            .map(|k| k.trim().starts_with("sk-ant-"))
+            .unwrap_or(false);
+
+    let messenger = fs::read_to_string(dir.join("messenger_configured"))
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    ConfigInfo {
+        api_key_set,
+        messenger: if messenger.is_empty() { None } else { Some(messenger) },
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigInfo {
+    pub api_key_set: bool,
+    pub messenger: Option<String>,
+}
+
 /// Open embedded webview to claude.ai for login.
 /// Uses both on_navigation and URL polling to detect post-login SPA navigations.
 #[tauri::command]

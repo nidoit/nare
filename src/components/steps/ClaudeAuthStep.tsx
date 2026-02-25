@@ -14,11 +14,11 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
   async function handleSaveKey() {
     const key = apiKey.trim();
     if (!key) {
-      setError("Please enter your API key");
+      setError("API 키를 입력해주세요");
       return;
     }
     if (!key.startsWith("sk-ant-")) {
-      setError("Invalid key format. Anthropic API keys start with 'sk-ant-'");
+      setError("올바르지 않은 형식입니다. Anthropic API 키는 'sk-ant-'로 시작합니다");
       return;
     }
 
@@ -37,20 +37,19 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
   return (
     <div className="step">
       <div className="step-icon">🔑</div>
-      <h1>Anthropic API Key</h1>
+      <h1>Anthropic API 키</h1>
       <p>
-        NARE uses the Claude API to understand your messages and manage your system.
+        NARE는 Claude API를 사용하여 메시지를 이해하고 시스템을 관리합니다.
       </p>
 
       <div className="auth-state">
         {authed ? (
-          <span className="status-badge success">✓ API key configured</span>
+          <span className="status-badge success">✓ API 키 설정됨</span>
         ) : (
           <>
             <div className="telegram-instructions">
               <ol>
                 <li>
-                  Go to{" "}
                   <a
                     href="https://console.anthropic.com/settings/keys"
                     target="_blank"
@@ -59,9 +58,10 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
                   >
                     console.anthropic.com/settings/keys
                   </a>
+                  에 접속하세요
                 </li>
-                <li>Create a new API key</li>
-                <li>Paste it below</li>
+                <li>새 API 키를 생성하세요</li>
+                <li>아래에 붙여넣기하세요</li>
               </ol>
             </div>
 
@@ -80,7 +80,7 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
                 onClick={handleSaveKey}
                 disabled={loading}
               >
-                {loading ? "Saving..." : "Save"}
+                {loading ? "저장 중..." : "저장"}
               </button>
             </div>
 
@@ -91,8 +91,8 @@ export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
             )}
 
             <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: 12 }}>
-              Your key is stored locally at ~/.config/nare/credentials/claude (chmod 600).
-              It never leaves your machine except to call the Anthropic API.
+              키는 ~/.config/nare/credentials/claude에 로컬 저장됩니다 (chmod 600).
+              Anthropic API 호출 외에는 외부로 전송되지 않습니다.
             </p>
           </>
         )}

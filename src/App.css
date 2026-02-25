@@ -527,3 +527,77 @@ html, body, #root {
 
 .done-row:not(:last-child) { border-bottom: 1px solid var(--border); }
 .done-row .done-key { flex: 0 0 110px; font-weight: 500; color: var(--text); }
+
+/* ── Dashboard ───────────────────────────────────────────────── */
+.dashboard-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* ── Settings ────────────────────────────────────────────────── */
+.app-settings {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.settings-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.settings-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.settings-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.settings-label {
+  color: var(--text-muted);
+  flex: 0 0 50px;
+}
+
+.settings-danger {
+  border-color: color-mix(in srgb, var(--red) 30%, transparent);
+}
+
+.btn-danger {
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  color: var(--red);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
+  border-radius: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--red) 25%, transparent);
+}
