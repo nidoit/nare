@@ -1,20 +1,22 @@
 import { useState } from "react";
 import WelcomeStep from "./steps/WelcomeStep";
 import ClaudeAuthStep from "./steps/ClaudeAuthStep";
-import WhatsAppStep from "./steps/WhatsAppStep";
+import MessengerStep from "./steps/MessengerStep";
 import DoneStep from "./steps/DoneStep";
+import { useI18n } from "../i18n";
 
 interface Props {
   initialClaudeConfigured: boolean;
   initialMessengerConfigured: boolean;
 }
 
-const STEPS = ["시작", "AI", "메신저", "완료"];
-
 export default function SetupWizard({
   initialClaudeConfigured,
   initialMessengerConfigured,
 }: Props) {
+  const { t } = useI18n();
+  const STEPS = [t("steps.start"), t("steps.ai"), t("steps.messenger"), t("steps.done")];
+
   const initialStep = initialMessengerConfigured ? 3 : initialClaudeConfigured ? 2 : 0;
 
   const [step, setStep] = useState(initialStep);
@@ -29,7 +31,7 @@ export default function SetupWizard({
       {/* Progress bar */}
       <div className="wizard-progress">
         {STEPS.map((label, i) => (
-          <div key={label} style={{ display: "contents" }}>
+          <div key={i} style={{ display: "contents" }}>
             {i > 0 && (
               <div className={`step-connector ${i <= step ? "done" : ""}`} />
             )}
@@ -63,10 +65,10 @@ export default function SetupWizard({
           />
         )}
         {step === 2 && (
-          <WhatsAppStep onConnected={(id) => setMessengerId(id)} />
+          <MessengerStep onConnected={(id) => setMessengerId(id)} />
         )}
         {step === 3 && (
-          <DoneStep claudeAuthed={claudeAuthed} waPhone={messengerId} />
+          <DoneStep claudeAuthed={claudeAuthed} messengerId={messengerId} />
         )}
       </div>
 
@@ -74,7 +76,7 @@ export default function SetupWizard({
       <div className="wizard-footer">
         {step > 0 && step < STEPS.length - 1 && (
           <button className="btn btn-ghost" onClick={back}>
-            ← 이전
+            {t("nav.back")}
           </button>
         )}
         {step < STEPS.length - 1 && (
@@ -86,7 +88,7 @@ export default function SetupWizard({
               (step === 2 && !messengerId)
             }
           >
-            {step === STEPS.length - 2 ? "완료 →" : "다음 →"}
+            {step === STEPS.length - 2 ? t("nav.finish") : t("nav.next")}
           </button>
         )}
       </div>

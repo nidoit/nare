@@ -2,13 +2,14 @@
  * NARE Telegram Bridge + AI Agent
  *
  * Uses the official Telegram Bot API via Node.js built-in https.
- * Processes messages through Claude API (Anthropic) and responds.
+ * Processes messages through:
+ *   - Claude PRO/MAX via Claude CLI (subprocess, OAuth-based)
+ *   - DeepSeek API (HTTP, API key)
  * Zero npm dependencies required.
  *
  * Environment variables:
  *   TELEGRAM_BOT_TOKEN   — Bot token from @BotFather
  *   AI_PROVIDER          — "claude" or "deepseek" (default: auto-detect)
- *   ANTHROPIC_API_KEY    — Anthropic API key (for Claude)
  *   DEEPSEEK_API_KEY     — DeepSeek API key (for DeepSeek)
  *   NARE_SYSTEM_INFO     — System info string (optional)
  *
@@ -25,7 +26,7 @@
  */
 
 const https = require("https");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 const os = require("os");
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -36,13 +37,11 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY || "";
 
-// Auto-detect provider: explicit env > whichever key is set > none
+// Auto-detect provider: explicit env > whichever key is set > claude (CLI)
 const AI_PROVIDER = process.env.AI_PROVIDER
-  || (ANTHROPIC_KEY ? "claude" : DEEPSEEK_KEY ? "deepseek" : "none");
-const API_KEY = AI_PROVIDER === "deepseek" ? DEEPSEEK_KEY : ANTHROPIC_KEY;
+  || (DEEPSEEK_KEY ? "deepseek" : "claude");
 
 const API_BASE = `https://api.telegram.org/bot${TOKEN}`;
 let offset = 0;
@@ -151,10 +150,6 @@ const conversations = new Map();
 const MAX_HISTORY = 20;
 
 async function callAI(chatId, userMessage) {
-  if (!API_KEY) {
-    return "AI API 키가 설정되지 않았습니다. NARE 설정에서 API 키를 추가해주세요.";
-  }
-
   // Get or create conversation history
   if (!conversations.has(chatId)) {
     conversations.set(chatId, []);
@@ -178,64 +173,42 @@ async function callAI(chatId, userMessage) {
   try {
     const response = AI_PROVIDER === "deepseek"
       ? await deepseekRequest(history)
-      : await claudeRequest(history);
+      : await claudeCliRequest(userMessage);
     // Add assistant response to history
     history.push({ role: "assistant", content: response });
     return response;
   } catch (e) {
-    return `AI API 오류: ${e.message}`;
+    return `AI error: ${e.message}`;
   }
 }
 
-// ── Claude (Anthropic) ──────────────────────────────────────────────────────
+// ── Claude CLI (PRO/MAX via OAuth) ──────────────────────────────────────────
 
-function claudeRequest(messages) {
+function claudeCliRequest(message) {
   return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: messages,
-    });
+    try {
+      // Build prompt with system context
+      const prompt = `${SYSTEM_PROMPT}\n\nUser message:\n${message}`;
 
-    const options = {
-      hostname: "api.anthropic.com",
-      path: "/v1/messages",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Length": Buffer.byteLength(payload),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          if (json.error) {
-            reject(new Error(json.error.message || JSON.stringify(json.error)));
-          } else if (json.content && json.content[0]) {
-            resolve(json.content[0].text);
-          } else {
-            reject(new Error(`Unexpected response: ${data.slice(0, 300)}`));
-          }
-        } catch (e) {
-          reject(new Error(`Parse error: ${data.slice(0, 300)}`));
-        }
+      const output = execFileSync("claude", [
+        "-p", prompt,
+        "--output-format", "text",
+      ], {
+        encoding: "utf8",
+        timeout: 120000,
+        maxBuffer: 1024 * 1024,
       });
-    });
 
-    req.on("error", reject);
-    req.setTimeout(120000, () => {
-      req.destroy();
-      reject(new Error("Request timed out (120s)"));
-    });
-    req.write(payload);
-    req.end();
+      resolve(output.trim());
+    } catch (e) {
+      if (e.status) {
+        reject(new Error(`Claude CLI exited with code ${e.status}: ${(e.stderr || "").slice(0, 500)}`));
+      } else if (e.killed) {
+        reject(new Error("Claude CLI timed out (120s)"));
+      } else {
+        reject(new Error(`Claude CLI error: ${e.message}. Is 'claude' CLI installed? (npm install -g @anthropic-ai/claude-code)`));
+      }
+    }
   });
 }
 
@@ -243,6 +216,11 @@ function claudeRequest(messages) {
 
 function deepseekRequest(messages) {
   return new Promise((resolve, reject) => {
+    if (!DEEPSEEK_KEY) {
+      reject(new Error("DeepSeek API key not set"));
+      return;
+    }
+
     // DeepSeek uses OpenAI-compatible format with system as a message
     const fullMessages = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -261,7 +239,7 @@ function deepseekRequest(messages) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${API_KEY}`,
+        "Authorization": `Bearer ${DEEPSEEK_KEY}`,
         "Content-Length": Buffer.byteLength(payload),
       },
     };
@@ -494,12 +472,8 @@ async function handleCommand(cmd) {
 (async () => {
   await validateToken();
   emit({ event: "waiting", message: "Send /start to the bot on Telegram to connect" });
-  if (API_KEY) {
-    const providerName = AI_PROVIDER === "deepseek" ? "DeepSeek" : "Claude";
-    emit({ event: "info", message: `AI responses enabled (${providerName})` });
-  } else {
-    emit({ event: "info", message: "No API key — AI responses disabled. Set API key to enable." });
-  }
+  const providerName = AI_PROVIDER === "deepseek" ? "DeepSeek (API)" : "Claude (CLI/PRO/MAX)";
+  emit({ event: "info", message: `AI provider: ${providerName}` });
   poll().catch((err) => {
     emit({ event: "error", message: String(err) });
     process.exit(1);

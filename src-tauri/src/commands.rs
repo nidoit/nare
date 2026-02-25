@@ -8,8 +8,6 @@ use tauri::{AppHandle, Emitter, Manager};
 
 // ── Embedded bridge source ──────────────────────────────────────────────────
 
-const BRIDGE_WA_JS: &str = include_str!("../../bridge/index.js");
-const BRIDGE_WA_PKG: &str = include_str!("../../bridge/package.json");
 const BRIDGE_TG_JS: &str = include_str!("../../bridge/telegram.js");
 
 // ── Bridge state ─────────────────────────────────────────────────────────
@@ -45,27 +43,17 @@ pub fn check_setup_status() -> SetupStatus {
     }
 }
 
-/// Save an AI provider API key securely.
+/// Save a DeepSeek API key securely.
 #[tauri::command]
 pub fn save_api_key(provider: String, key: String) -> Result<(), String> {
     let creds_dir = config_dir().join("credentials");
     fs::create_dir_all(&creds_dir).map_err(|e| e.to_string())?;
 
-    let filename = match provider.as_str() {
-        "deepseek" => "deepseek",
-        _ => "claude",
-    };
-    let path = creds_dir.join(filename);
+    let path = creds_dir.join("deepseek");
     fs::write(&path, &key).map_err(|e| e.to_string())?;
 
     // Store the chosen provider
     fs::write(creds_dir.join("provider"), &provider).map_err(|e| e.to_string())?;
-
-    // Remove the other provider's key to avoid confusion
-    match provider.as_str() {
-        "deepseek" => { let _ = fs::remove_file(creds_dir.join("claude")); }
-        _ => { let _ = fs::remove_file(creds_dir.join("deepseek")); }
-    }
 
     // chmod 600
     #[cfg(unix)]
@@ -74,6 +62,15 @@ pub fn save_api_key(provider: String, key: String) -> Result<(), String> {
         let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
     }
 
+    Ok(())
+}
+
+/// Save provider choice (used when Claude OAuth login succeeds).
+#[tauri::command]
+pub fn save_provider_choice(provider: String) -> Result<(), String> {
+    let creds_dir = config_dir().join("credentials");
+    fs::create_dir_all(&creds_dir).map_err(|e| e.to_string())?;
+    fs::write(creds_dir.join("provider"), &provider).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -86,7 +83,6 @@ pub fn reset_setup() -> Result<(), String> {
     let _ = fs::remove_file(dir.join("credentials/provider"));
     let _ = fs::remove_file(dir.join("messenger_configured"));
     let _ = fs::remove_file(dir.join("config.toml"));
-    let _ = fs::remove_dir_all(dir.join("whatsapp/session"));
     Ok(())
 }
 
@@ -105,10 +101,8 @@ pub fn get_config_info() -> ConfigInfo {
             && fs::read_to_string(dir.join("credentials/deepseek"))
                 .map(|k| k.trim().starts_with("sk-"))
                 .unwrap_or(false),
-        _ => dir.join("credentials/claude").exists()
-            && fs::read_to_string(dir.join("credentials/claude"))
-                .map(|k| k.trim().starts_with("sk-ant-"))
-                .unwrap_or(false),
+        "claude" => dir.join("credentials/claude").exists(),
+        _ => false,
     };
 
     let messenger = fs::read_to_string(dir.join("messenger_configured"))
@@ -214,12 +208,12 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
 
     // Read provider and API key
     let provider = fs::read_to_string(config_dir().join("credentials/provider"))
-        .unwrap_or_else(|_| "claude".to_string());
+        .unwrap_or_else(|_| "deepseek".to_string());
     let provider = provider.trim().to_string();
 
     let api_key = match provider.as_str() {
         "deepseek" => fs::read_to_string(config_dir().join("credentials/deepseek")).unwrap_or_default(),
-        _ => fs::read_to_string(config_dir().join("credentials/claude")).unwrap_or_default(),
+        _ => String::new(),
     };
 
     // Spawn — no npm install needed, uses built-in https
@@ -227,7 +221,6 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
         .arg(&script)
         .env("TELEGRAM_BOT_TOKEN", &token)
         .env("AI_PROVIDER", &provider)
-        .env("ANTHROPIC_API_KEY", if provider == "claude" { api_key.trim() } else { "" })
         .env("DEEPSEEK_API_KEY", if provider == "deepseek" { api_key.trim() } else { "" })
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -265,7 +258,7 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
                     }
                     Some("ready") => {
                         let chat_id = msg.get("chatId").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        write_messenger_config("telegram", &chat_id);
+                        write_messenger_config(&chat_id);
                         let _ = app_clone.emit("tg-connected", chat_id);
                     }
                     Some("message") => {
@@ -295,101 +288,7 @@ pub async fn start_telegram_bridge(app: AppHandle, token: String) -> Result<(), 
     Ok(())
 }
 
-// ── WhatsApp bridge ─────────────────────────────────────────────────────────
-
-/// Start WhatsApp bridge (Baileys). Requires npm install for dependencies.
-#[tauri::command]
-pub async fn start_wa_bridge(app: AppHandle) -> Result<(), String> {
-    use std::process::{Command, Stdio};
-    use std::io::BufRead;
-
-    kill_existing_bridge(&app)?;
-
-    // Extract embedded bridge files
-    let bridge_dir = config_dir().join("bridge");
-    fs::create_dir_all(&bridge_dir).map_err(|e| format!("Failed to create bridge dir: {e}"))?;
-    fs::write(bridge_dir.join("index.js"), BRIDGE_WA_JS)
-        .map_err(|e| format!("Failed to write index.js: {e}"))?;
-    fs::write(bridge_dir.join("package.json"), BRIDGE_WA_PKG)
-        .map_err(|e| format!("Failed to write package.json: {e}"))?;
-
-    // Auto-install bridge dependencies if node_modules is missing
-    if !bridge_dir.join("node_modules").exists() {
-        let npm_status = Command::new("npm")
-            .arg("install")
-            .current_dir(&bridge_dir)
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .status()
-            .map_err(|e| format!("Failed to run `npm install`: {e}"))?;
-
-        if !npm_status.success() {
-            return Err("Failed to install WhatsApp bridge dependencies.".into());
-        }
-    }
-
-    let session_dir = config_dir().join("whatsapp/session");
-    fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
-
-    let mut child = Command::new("node")
-        .arg(bridge_dir.join("index.js"))
-        .env("WA_SESSION_DIR", session_dir.to_string_lossy().as_ref())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to start WhatsApp bridge: {e}. Is Node.js installed?"))?;
-
-    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
-    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
-
-    {
-        let state = app.state::<BridgeState>();
-        let mut guard = state.0.lock().map_err(|e| e.to_string())?;
-        *guard = Some(child);
-    }
-
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        let reader = std::io::BufReader::new(stdout);
-        for line in reader.lines() {
-            let Ok(line) = line else { break };
-            let trimmed = line.trim();
-            if trimmed.is_empty() { continue; }
-
-            if let Ok(msg) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                match msg.get("event").and_then(|v| v.as_str()) {
-                    Some("qr") => {
-                        if let Some(data) = msg.get("data").and_then(|v| v.as_str()) {
-                            let _ = app_clone.emit("wa-qr", data.to_string());
-                        }
-                    }
-                    Some("ready") => {
-                        let phone = msg.get("phone").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        write_messenger_config("whatsapp", &phone);
-                        let _ = app_clone.emit("wa-authenticated", phone);
-                    }
-                    Some("disconnected") => {
-                        let _ = app_clone.emit("wa-disconnected", ());
-                    }
-                    _ => {}
-                }
-            }
-        }
-    });
-
-    std::thread::spawn(move || {
-        let reader = std::io::BufReader::new(stderr);
-        for line in reader.lines() {
-            let Ok(line) = line else { break };
-            eprintln!("[nare-bridge] {}", line);
-        }
-    });
-
-    Ok(())
-}
-
-/// Stop the running bridge process (WhatsApp or Telegram).
+/// Stop the running bridge process.
 #[tauri::command]
 pub fn stop_bridge(app: AppHandle) -> Result<(), String> {
     kill_existing_bridge(&app)
@@ -400,15 +299,10 @@ pub fn stop_bridge(app: AppHandle) -> Result<(), String> {
 pub async fn start_services() -> Result<(), String> {
     use std::process::Command;
 
-    for args in [
-        &["--user", "enable", "--now", "nare-agent.service"][..],
-        &["--user", "enable", "--now", "nare-wa-bridge.service"][..],
-    ] {
-        Command::new("systemctl")
-            .args(args)
-            .status()
-            .map_err(|e| e.to_string())?;
-    }
+    Command::new("systemctl")
+        .args(["--user", "enable", "--now", "nare-agent.service"])
+        .status()
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -427,21 +321,20 @@ fn kill_existing_bridge(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn write_messenger_config(messenger: &str, id: &str) {
+fn write_messenger_config(chat_id: &str) {
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
 
     // Mark messenger as configured
-    let _ = fs::write(dir.join("messenger_configured"), messenger);
+    let _ = fs::write(dir.join("messenger_configured"), "telegram");
 
     // Read chosen AI provider
     let provider = fs::read_to_string(dir.join("credentials/provider"))
-        .unwrap_or_else(|_| "claude".to_string());
+        .unwrap_or_else(|_| "deepseek".to_string());
     let provider = provider.trim();
 
-    let content = match messenger {
-        "telegram" => format!(
-            r#"[ai_agent]
+    let content = format!(
+        r#"[ai_agent]
 enabled          = true
 provider         = "{provider}"
 messenger        = "telegram"
@@ -449,32 +342,10 @@ language         = "auto"
 safe_mode        = true
 
 [telegram]
-chat_id          = "{id}"
+chat_id          = "{chat_id}"
 session_timeout  = 3600
 "#
-        ),
-        _ => {
-            let allowed = if id.is_empty() {
-                String::new()
-            } else {
-                format!("allowed_numbers = [\"+{id}\"]")
-            };
-            format!(
-                r#"[ai_agent]
-enabled          = true
-provider         = "{provider}"
-messenger        = "whatsapp"
-language         = "auto"
-safe_mode        = true
-
-[whatsapp]
-{allowed}
-require_prefix   = false
-session_timeout  = 3600
-"#
-            )
-        }
-    };
+    );
 
     let _ = fs::write(dir.join("config.toml"), content);
 }

@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-**NARE** is one of three differentiating features of the Blunux Linux distribution (Arch-based). It enables users to manage their Linux system through natural language via WhatsApp messages, backed by Claude or DeepSeek AI.
+**NARE** is one of three differentiating features of the Blunux Linux distribution (Arch-based). It enables users to manage their Linux system through natural language via Telegram messages, backed by Claude PRO/MAX (OAuth/CLI) or DeepSeek API.
 
 - **App type:** Tauri 2 desktop app (Rust backend + React/TypeScript frontend)
 - **Tauri crate:** `nare` (`src-tauri/`)
@@ -18,7 +18,7 @@
 
 ### Repository Status
 
-This repository contains both **design documentation** (PRD.md, TDD.md) and the **Tauri desktop app implementation** (`src/`, `src-tauri/`, `bridge/`). The app is currently at v0.1.0 — setup wizard only (Claude OAuth + WhatsApp QR login).
+This repository contains both **design documentation** (PRD.md, TDD.md) and the **Tauri desktop app implementation** (`src/`, `src-tauri/`, `bridge/`). The app is currently at v0.1.0 — setup wizard only (Claude OAuth / DeepSeek API + Telegram bot setup).
 
 ---
 
@@ -37,15 +37,16 @@ nare/
 ├── index.html              # HTML entry point
 │
 ├── src/                    # React + TypeScript frontend
-│   ├── main.tsx            # React entry
+│   ├── main.tsx            # React entry (wraps App in I18nProvider)
 │   ├── App.tsx             # App root — checks setup status, renders wizard
 │   ├── App.css             # All styles (CSS custom properties, no framework)
+│   ├── i18n.tsx            # i18n system (Swedish/Korean, React context)
 │   └── components/
 │       ├── SetupWizard.tsx # Multi-step wizard shell + progress bar
 │       └── steps/
 │           ├── WelcomeStep.tsx     # Step 0: intro & feature list
-│           ├── ClaudeAuthStep.tsx  # Step 1: claude.ai embedded login
-│           ├── WhatsAppStep.tsx    # Step 2: WA QR scan
+│           ├── ClaudeAuthStep.tsx  # Step 1: Claude OAuth or DeepSeek API key
+│           ├── MessengerStep.tsx   # Step 2: Telegram bot setup
 │           └── DoneStep.tsx        # Step 3: confirmation & start
 │
 ├── src-tauri/              # Tauri Rust backend
@@ -61,9 +62,8 @@ nare/
 │       ├── lib.rs          # Plugin registration + invoke_handler
 │       └── commands.rs     # All Tauri commands (see §Commands)
 │
-└── bridge/                 # Node.js WhatsApp bridge (Baileys)
-    ├── package.json        # deps: @whiskeysockets/baileys, qrcode, pkg
-    └── index.js            # Sidecar: reads stdin commands, writes stdout events
+└── bridge/                 # Node.js Telegram bridge (zero npm deps)
+    └── telegram.js         # Telegram Bot API + Claude CLI / DeepSeek API
 ```
 
 ---
@@ -82,21 +82,22 @@ nare/
 │  │                        │   │                        │ │
 │  │  • SetupWizard         │   │  • check_setup_status  │ │
 │  │  • ClaudeAuthStep      │   │  • open_claude_login   │ │
-│  │  • WhatsAppStep        │   │  • start_wa_bridge     │ │
+│  │  • MessengerStep       │   │  • start_telegram_bridge│ │
 │  │  • DoneStep            │   │  • start_services      │ │
 │  └────────────────────────┘   └──────────┬─────────────┘ │
 │                                          │               │
-│                              Tauri sidecar spawn         │
+│                              Node.js child process       │
 │                                          │               │
 │                              ┌───────────▼─────────────┐ │
-│                              │  nare-bridge (Node.js)  │ │
-│                              │  Baileys / WhatsApp Web │ │
+│                              │  telegram.js (Node.js)  │ │
+│                              │  Telegram Bot API       │ │
+│                              │  + Claude CLI / DeepSeek│ │
 │                              │  stdout → JSON events   │ │
 │                              │  stdin  ← JSON commands │ │
 │                              └───────────┬─────────────┘ │
 └──────────────────────────────────────────┼───────────────┘
-                                           │ WebSocket
-                                    WhatsApp servers
+                                           │ HTTPS
+                                    Telegram API servers
 ```
 
 ### Claude login flow
@@ -118,35 +119,34 @@ Emit "claude-auth-success" → React frontend
 Close webview window
 ```
 
-### WhatsApp QR flow
+### Telegram bot flow
 
 ```
-User clicks "Start WhatsApp Setup"
+User enters bot token from @BotFather
         │
         ▼
-Tauri spawns nare-bridge sidecar
+Tauri spawns telegram.js bridge (Node.js child process)
         │
-bridge outputs: { "event": "qr", "data": "<base64 PNG>" }
+bridge validates token → emits { "event": "bot_info", "username": "..." }
+        │
+bridge emits { "event": "waiting" }
+        │
+        │  user sends /start in Telegram
+        ▼
+bridge emits { "event": "ready", "chatId": "..." }
         │
         ▼
-Tauri emits "wa-qr" event → React shows QR image
-        │
-        │  user scans with phone
-        ▼
-bridge outputs: { "event": "ready", "phone": "821012345678" }
-        │
-        ▼
-Write ~/.config/nare/config.toml with allowed_numbers
-Emit "wa-authenticated" → React advances to Done step
+Write ~/.config/nare/config.toml with chat_id
+Emit "tg-connected" → React advances to Done step
 ```
 
 ### Components
 
 | Component | Language | Role |
 |---|---|---|
-| `src/` | React + TypeScript | Setup wizard UI, future chat view |
-| `src-tauri/` | Rust (Tauri 2) | Window management, sidecar spawn, config I/O |
-| `bridge/` | Node.js | WhatsApp client via Baileys (packaged as sidecar binary) |
+| `src/` | React + TypeScript | Setup wizard UI (i18n: Swedish/Korean) |
+| `src-tauri/` | Rust (Tauri 2) | Window management, bridge spawn, config I/O |
+| `bridge/` | Node.js | Telegram bot + AI (Claude CLI or DeepSeek HTTP) |
 
 ---
 
@@ -166,7 +166,9 @@ sudo pacman -S webkit2gtk base-devel
 
 # Install JS dependencies
 npm install
-cd bridge && npm install && cd ..
+
+# For Claude PRO/MAX mode: install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
 ```
 
 ### Running in development
@@ -175,17 +177,9 @@ cd bridge && npm install && cd ..
 npm run tauri dev          # starts Vite dev server + Tauri window
 ```
 
-### Building the bridge sidecar (required before production build)
-
-```bash
-npm run build:bridge
-# produces: src-tauri/binaries/nare-bridge-x86_64-unknown-linux-gnu
-```
-
 ### Production build
 
 ```bash
-npm run build:bridge       # build sidecar first
 npm run tauri build        # produces installer in src-tauri/target/release/bundle/
 ```
 
@@ -193,19 +187,23 @@ npm run tauri build        # produces installer in src-tauri/target/release/bund
 
 | Command | Description |
 |---|---|
-| `check_setup_status` | Returns `{ claude_configured, wa_configured }` |
+| `check_setup_status` | Returns `{ claude_configured, messenger_configured }` |
 | `open_claude_login` | Opens embedded webview to claude.ai; emits `claude-auth-success` on success |
-| `start_wa_bridge` | Spawns `nare-bridge` sidecar; emits `wa-qr` and `wa-authenticated` events |
-| `start_services` | Runs `systemctl --user enable --now` for both NARE services |
+| `save_api_key` | Saves DeepSeek API key to credentials directory |
+| `save_provider_choice` | Stores the selected AI provider ("claude" or "deepseek") |
+| `start_telegram_bridge` | Spawns Telegram bridge; emits `tg-bot-info`, `tg-waiting`, `tg-connected` events |
+| `stop_bridge` | Kills the running bridge process |
+| `start_services` | Runs `systemctl --user enable --now nare-agent.service` |
 
 ### Tauri events (Rust → React)
 
 | Event | Payload | When |
 |---|---|---|
 | `claude-auth-success` | `null` | User completes claude.ai login |
-| `wa-qr` | `string` (base64 PNG data URL) | Bridge generates new QR |
-| `wa-authenticated` | `string` (phone number) | WhatsApp scan confirmed |
-| `wa-disconnected` | `null` | Bridge loses connection |
+| `tg-bot-info` | `string` (bot username) | Bot token validated |
+| `tg-waiting` | `null` | Waiting for user to send /start |
+| `tg-connected` | `string` (chat ID) | User sent /start to bot |
+| `tg-error` | `string` (error message) | Bridge encountered an error |
 
 ---
 
@@ -217,10 +215,10 @@ src/
 ├── agent.rs         # Agent orchestrator + tool-use loop
 ├── error.rs         # Unified error types (AgentError hierarchy)
 ├── config.rs        # AgentConfig, Language, ModelId, ProviderType
-├── strings.rs       # i18n UI strings (Korean + English)
+├── strings.rs       # i18n UI strings (Swedish + Korean)
 ├── providers/
 │   ├── mod.rs       # Provider trait + build_provider()
-│   ├── claude.rs    # ClaudeApiProvider (HTTP) + ClaudeOAuthProvider (subprocess)
+│   ├── claude.rs    # ClaudeOAuthProvider (subprocess via Claude CLI)
 │   └── deepseek.rs  # DeepSeekProvider (OpenAI-compatible HTTP)
 ├── tools/
 │   ├── mod.rs       # SystemTool trait + ToolRegistry
@@ -261,12 +259,9 @@ dirs                = "5"          # ~/.config path
 
 ### Node.js bridge (bridge/)
 
-| Package | Purpose |
+| File | Purpose |
 |---|---|
-| `@whiskeysockets/baileys` | WhatsApp Web protocol (no Puppeteer/browser required) |
-| `qrcode` | Generate QR PNG data URL |
-| `pino` | Silent logger (suppresses Baileys noise) |
-| `pkg` (dev) | Compile bridge to standalone binary for Tauri sidecar |
+| `telegram.js` | Telegram Bot API bridge + AI agent (Claude CLI or DeepSeek HTTP). Zero npm dependencies — uses only Node.js built-in `https`. |
 
 ---
 
@@ -346,14 +341,12 @@ Commands:
 [ai_agent]
 enabled          = true
 provider         = "claude"    # "claude" | "deepseek"
-claude_mode      = "oauth"     # "oauth" | "api"
-whatsapp_enabled = true
-language         = "auto"      # "auto" | "ko" | "en"
+messenger        = "telegram"
+language         = "auto"      # "auto" | "ko" | "sv"
 safe_mode        = true
 
-[whatsapp]
-allowed_numbers  = ["+821012345678"]
-require_prefix   = false
+[telegram]
+chat_id          = "123456789"
 session_timeout  = 3600
 ```
 
@@ -363,16 +356,16 @@ session_timeout  = 3600
 ~/.config/blunux-ai/
 ├── config.toml
 ├── credentials/             # chmod 600 — never store in config.toml
-│   ├── claude               # ANTHROPIC_API_KEY value
-│   └── deepseek             # DEEPSEEK_API_KEY value
+│   ├── claude               # "oauth:browser" (Claude PRO/MAX login token)
+│   ├── deepseek             # DEEPSEEK_API_KEY value
+│   └── provider             # Selected provider name ("claude" or "deepseek")
 ├── automations.toml         # cron-style automation rules
 ├── memory/
 │   ├── SYSTEM.md            # auto-refreshed on startup
 │   ├── USER.md              # learned user preferences
 │   ├── MEMORY.md            # long-term persistent facts
 │   └── daily/YYYY-MM-DD.md
-├── logs/commands.log        # append-only command audit log
-└── whatsapp/session/        # whatsapp-web.js session data
+└── logs/commands.log        # append-only command audit log
 ```
 
 ### /usr/share/blunux/config.toml (blunux2SB system config)
@@ -496,19 +489,14 @@ Memory files are read at the start of each conversation to build the system prom
 
 ## Provider Details
 
-### Claude — Mode A: Direct HTTP API
+### Claude PRO/MAX (CLI subprocess)
 
-- Endpoint: `https://api.anthropic.com/v1/messages`
-- Headers: `x-api-key`, `anthropic-version: 2023-06-01`
-- Credential: file `~/.config/blunux-ai/credentials/claude` (chmod 600)
-- Timeout: 120s
-
-### Claude — Mode B: OAuth (subprocess)
-
-- Spawns: `claude -p "<message>" --output-format json --model <model>`
+- Spawns: `claude -p "<prompt>" --output-format text`
 - Requires `claude` CLI installed (`npm install -g @anthropic-ai/claude-code`)
+- Requires Claude PRO or MAX subscription (OAuth login via embedded webview)
 - Multi-turn conversation flattened to single prompt string
 - Timeout: 120s
+- No direct API key needed — uses Claude Code's OAuth session
 
 ### DeepSeek
 
@@ -530,9 +518,17 @@ Memory files are read at the start of each conversation to build the system prom
 
 ## i18n
 
-Language is detected from `config.toml`'s `locale.language` list — Korean if any entry starts with `"ko"`, otherwise English.
+The frontend uses a React context-based i18n system (`src/i18n.tsx`) supporting **Swedish (sv)** and **Korean (ko)**.
 
-All user-facing strings live in `src/strings.rs` via the `UiKey` enum. Always add both Korean and English variants. Never hardcode UI strings directly in business logic.
+- Language preference is stored in `localStorage` (key: `nare-lang`)
+- Default language: Korean
+- Users can switch languages in the Settings view
+- All UI strings are defined in `src/i18n.tsx` as a `strings` map keyed by string ID
+- Components access translations via the `useI18n()` hook: `const { t, lang, setLang } = useI18n()`
+- When adding new UI strings, always add both `ko` and `sv` variants
+- Never hardcode UI strings directly in components
+
+For the future CLI agent, strings will live in `src/strings.rs` via the `UiKey` enum with Korean and Swedish variants.
 
 ---
 
@@ -559,7 +555,6 @@ All user-facing strings live in `src/strings.rs` via the `UiKey` enum. Always ad
 - **Never** execute a command without running it through `SafetyChecker` first
 - `RequiresConfirmation` tools must call `prompt_confirmation()` before `execute()`
 - Log every executed command to `commands.log`
-- WhatsApp bridge must validate sender against `allowed_numbers` whitelist
 
 ### File permissions
 
@@ -638,8 +633,6 @@ The workspace `Cargo.toml` must include `"crates/ai-agent"` in `members`.
 | App Installer card JSON | Yes | ISO build |
 | Node.js | No | App Installer |
 | Claude Code CLI | No | App Installer |
-| `blunux-whatsapp-bridge` | No | App Installer |
-| WhatsApp session data | No | User QR scan |
 | API credentials | Never | User input |
 
 ---
@@ -647,20 +640,13 @@ The workspace `Cargo.toml` must include `"crates/ai-agent"` in `members`.
 ## systemd Services (post-install)
 
 ```ini
-# blunux-ai-agent.service
+# nare-agent.service
 [Service]
 ExecStart=/usr/bin/blunux-ai daemon
 Environment=BLUNUX_AI_HOME=%h/.config/blunux-ai
-
-# blunux-wa-bridge.service
-[Unit]
-Requires=blunux-ai-agent.service
-[Service]
-ExecStart=/usr/bin/blunux-wa-bridge
-Environment=BLUNUX_AI_SOCK=%t/blunux-ai.sock
 ```
 
-Both are **systemd user services** (`systemctl --user`), not system-level.
+This is a **systemd user service** (`systemctl --user`), not system-level.
 
 ---
 
@@ -679,7 +665,6 @@ When implementing a module, read the corresponding section in `TDD.md` first. Al
 
 | Risk | Mitigation |
 |---|---|
-| `whatsapp-web.js` is unofficial | Recommend dedicated WhatsApp number; rate-limit messages to ≤5/min; Telegram is the planned alternative |
-| Claude Code OAuth policy changes | API mode is the fallback; DeepSeek is the secondary fallback |
+| Claude Code OAuth policy changes | DeepSeek API is the fallback provider |
 | AI executing destructive system commands | Three-level permission model + SafetyChecker blocked patterns — never bypass |
 | API keys exposed in config or logs | Credentials always in separate chmod-600 files; commands.log omits key values |
