@@ -206,7 +206,7 @@ function claudeCliRequest(message) {
       } else if (e.killed) {
         reject(new Error("Claude CLI timed out (120s)"));
       } else {
-        reject(new Error(`Claude CLI error: ${e.message}. Is 'claude' CLI installed? (npm install -g @anthropic-ai/claude-code)`));
+        reject(new Error(`Claude CLI error: ${e.message}. Is 'claude' CLI installed? (curl -fsSL https://claude.ai/install.sh | bash)`));
       }
     }
   });

@@ -298,9 +298,9 @@ echo "=== NARE 설치 ==="
 echo "[1/6] 시스템 패키지 설치 중..."
 sudo pacman -S --noconfirm --needed nodejs npm
 
-# 2. Claude Code 설치 (OAuth 지원)
-echo "[2/6] Claude Code 설치 중..."
-npm install -g @anthropic-ai/claude-code
+# 2. Claude CLI 설치 (OAuth 지원, 네이티브 설치)
+echo "[2/6] Claude CLI 설치 중..."
+curl -fsSL https://claude.ai/install.sh | bash
 
 # 3. blunux-ai-agent 바이너리 설치 (AUR 또는 커스텀 repo)
 echo "[3/6] AI Agent 설치 중..."
@@ -536,7 +536,7 @@ pub async fn chat(message: &str) -> Result<String> {
 ```
 
 - Claude Pro/Max 구독에 포함 (추가 비용 없음)
-- Node.js + Claude Code CLI 필요 (App Installer가 설치)
+- Claude CLI 필요 (네이티브 설치: `curl -fsSL https://claude.ai/install.sh | bash` 또는 AUR: `yay -S claude-code`)
 - 사용량 제한 있음
 
 ### 6.2 DeepSeek Provider
@@ -568,8 +568,7 @@ pub async fn chat(messages: &[Message], api_key: &str) -> Result<String> {
 ```
 사용자 설정 (blunux-ai setup)
          │
-         ├─ Claude OAuth → Claude Code CLI 사용
-         ├─ Claude API → reqwest HTTP 직접 호출
+         ├─ Claude PRO/MAX → Claude CLI 사용 (OAuth 로그인)
          └─ DeepSeek → reqwest HTTP 직접 호출
          │
          ▼
@@ -713,8 +712,7 @@ end
 | install-ai-agent.sh | ✅ | App Installer 카드용 |
 | App Installer AI 카드 정의 | ✅ | App Installer에 표시 |
 | Node.js | ❌ | App Installer에서 설치 |
-| Claude Code CLI | ❌ | App Installer에서 설치 |
-| blunux-whatsapp-bridge | ❌ | App Installer에서 설치 |
+| Claude CLI | ❌ | 네이티브 설치 또는 AUR (`yay -S claude-code`) |
 | WhatsApp 세션 데이터 | ❌ | 사용자 QR 스캔 시 생성 |
 | API 키 | ❌ | 사용자가 직접 입력 |
 

@@ -886,16 +886,10 @@ Step 1: Welcome banner (language-aware)
 Step 2: Provider selection
   → [ Claude (Anthropic) | DeepSeek ]
 
-Step 3a (if Claude): Connection mode
-  → [ OAuth — Claude Pro/Max subscription (no API key) |
-      API Key — Direct HTTP (pay per token) ]
-
-Step 3b (if Claude OAuth): Check claude CLI installed
-  → if missing: "Installing Claude Code..." → npm install -g @anthropic-ai/claude-code
-  → "Please run: claude login" (open browser)
-
-Step 3b (if Claude API): Enter API key
-  → Masked input → validate by calling API → save to credentials/claude (chmod 600)
+Step 3a (if Claude): Check claude CLI installed
+  → if missing: "Installing Claude CLI..." → curl -fsSL https://claude.ai/install.sh | bash
+  → Or via AUR: yay -S claude-code
+  → Open embedded webview to claude.ai for OAuth login
 
 Step 3c (if DeepSeek): Enter API key
   → Masked input → validate → save to credentials/deepseek (chmod 600)

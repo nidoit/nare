@@ -71,16 +71,8 @@ if [ "$UNINSTALL" = true ]; then
     rm -f  "$ICON_DIR/512x512/apps/nare.png"
     rm -f  "$ICON_DIR/32x32/apps/nare.png"
 
-    # Clean up user config (WhatsApp session data)
-    # When running via sudo, use the real user's home directory
-    REAL_HOME="${HOME}"
-    if [ -n "${SUDO_USER:-}" ]; then
-        REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
-    fi
-    if [ -d "$REAL_HOME/.config/nare/whatsapp/session" ]; then
-        rm -rf "$REAL_HOME/.config/nare/whatsapp/session"
-        info "Cleaned  → $REAL_HOME/.config/nare/whatsapp/session"
-    fi
+    # Note: user config in ~/.config/nare/ is left intact (credentials, config.toml)
+    # The user can remove it manually if desired
 
     # Update icon cache if available
     if command -v gtk-update-icon-cache &>/dev/null; then
@@ -132,11 +124,38 @@ echo "==> Installing NARE to $PREFIX..."
 install -Dm755 nare "$BIN_DIR/nare"
 info "Binary  → $BIN_DIR/nare"
 
-# Bridge source (WhatsApp bridge — runs via node)
+# Bridge source (Telegram bridge — runs via node, zero npm deps)
 if [ -d bridge ]; then
     mkdir -p "$APP_DIR/bridge"
     cp -r bridge/* "$APP_DIR/bridge/"
     info "Bridge  → $APP_DIR/bridge/"
+fi
+
+# Install Claude CLI if not present (for Claude PRO/MAX mode)
+if ! command -v claude &>/dev/null; then
+    # Run as the real user (not root) so it installs to their ~/.local/bin
+    REAL_USER="${SUDO_USER:-$USER}"
+    REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
+
+    info "Installing Claude CLI (native installer)..."
+    if [ "$(id -u)" -eq 0 ] && [ "$REAL_USER" != "root" ]; then
+        su - "$REAL_USER" -c 'curl -fsSL https://claude.ai/install.sh | bash' 2>/dev/null || \
+            warn "Claude CLI install failed — install manually: curl -fsSL https://claude.ai/install.sh | bash"
+    else
+        curl -fsSL https://claude.ai/install.sh | bash 2>/dev/null || \
+            warn "Claude CLI install failed — install manually: curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+
+    # Ensure ~/.local/bin is in the user's PATH for bash and zsh
+    LOCAL_BIN="$REAL_HOME/.local/bin"
+    if [ -d "$LOCAL_BIN" ]; then
+        for rc in "$REAL_HOME/.bashrc" "$REAL_HOME/.zshrc"; do
+            if [ -f "$rc" ] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+                info "Added ~/.local/bin to PATH in $(basename "$rc")"
+            fi
+        done
+    fi
 fi
 
 # Icons
