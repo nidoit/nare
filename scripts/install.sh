@@ -133,9 +133,29 @@ fi
 
 # Install Claude CLI if not present (for Claude PRO/MAX mode)
 if ! command -v claude &>/dev/null; then
+    # Run as the real user (not root) so it installs to their ~/.local/bin
+    REAL_USER="${SUDO_USER:-$USER}"
+    REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
+
     info "Installing Claude CLI (native installer)..."
-    curl -fsSL https://claude.ai/install.sh | bash 2>/dev/null || \
-        warn "Claude CLI install failed — install manually: curl -fsSL https://claude.ai/install.sh | bash"
+    if [ "$(id -u)" -eq 0 ] && [ "$REAL_USER" != "root" ]; then
+        su - "$REAL_USER" -c 'curl -fsSL https://claude.ai/install.sh | bash' 2>/dev/null || \
+            warn "Claude CLI install failed — install manually: curl -fsSL https://claude.ai/install.sh | bash"
+    else
+        curl -fsSL https://claude.ai/install.sh | bash 2>/dev/null || \
+            warn "Claude CLI install failed — install manually: curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+
+    # Ensure ~/.local/bin is in the user's PATH for bash and zsh
+    LOCAL_BIN="$REAL_HOME/.local/bin"
+    if [ -d "$LOCAL_BIN" ]; then
+        for rc in "$REAL_HOME/.bashrc" "$REAL_HOME/.zshrc"; do
+            if [ -f "$rc" ] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+                info "Added ~/.local/bin to PATH in $(basename "$rc")"
+            fi
+        done
+    fi
 fi
 
 # Icons
