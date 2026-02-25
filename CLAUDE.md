@@ -167,8 +167,9 @@ sudo pacman -S webkit2gtk base-devel
 # Install JS dependencies
 npm install
 
-# For Claude PRO/MAX mode: install Claude Code CLI
-npm install -g @anthropic-ai/claude-code
+# For Claude PRO/MAX mode: install Claude CLI (native installer, no Node.js needed)
+curl -fsSL https://claude.ai/install.sh | bash
+# Or via AUR: yay -S claude-code
 ```
 
 ### Running in development
@@ -492,7 +493,7 @@ Memory files are read at the start of each conversation to build the system prom
 ### Claude PRO/MAX (CLI subprocess)
 
 - Spawns: `claude -p "<prompt>" --output-format text`
-- Requires `claude` CLI installed (`npm install -g @anthropic-ai/claude-code`)
+- Requires `claude` CLI installed (`curl -fsSL https://claude.ai/install.sh | bash` or `yay -S claude-code`)
 - Requires Claude PRO or MAX subscription (OAuth login via embedded webview)
 - Multi-turn conversation flattened to single prompt string
 - Timeout: 120s
@@ -632,7 +633,7 @@ The workspace `Cargo.toml` must include `"crates/ai-agent"` in `members`.
 | `install-ai-agent.sh` | Yes | ISO build |
 | App Installer card JSON | Yes | ISO build |
 | Node.js | No | App Installer |
-| Claude Code CLI | No | App Installer |
+| Claude CLI | No | Native installer or AUR (`yay -S claude-code`) |
 | API credentials | Never | User input |
 
 ---
