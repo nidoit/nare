@@ -6,11 +6,10 @@ import { useI18n } from "../../i18n";
 type SetupView = "select" | "claude" | "deepseek";
 
 interface Props {
-  authed: boolean;
   onAuthed: () => void;
 }
 
-export default function ClaudeAuthStep({ authed, onAuthed }: Props) {
+export default function ClaudeAuthStep({ onAuthed }: Props) {
   const { t } = useI18n();
   const [view, setView] = useState<SetupView>("select");
   const [claudeOk, setClaudeOk] = useState(false);
