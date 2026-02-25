@@ -289,6 +289,38 @@ html, body, #root {
 
 .feature-list .feat-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
 
+/* ── Language Selection ───────────────────────────────────────── */
+.lang-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.lang-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.lang-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(124, 106, 247, 0.12);
+}
+
+.lang-card-native {
+  font-size: 16px;
+  font-weight: 600;
+}
+
 /* ── Claude Auth ──────────────────────────────────────────────── */
 .auth-state {
   margin-top: 28px;

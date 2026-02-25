@@ -1,4 +1,5 @@
 import { useState } from "react";
+import LanguageStep from "./steps/LanguageStep";
 import WelcomeStep from "./steps/WelcomeStep";
 import ClaudeAuthStep from "./steps/ClaudeAuthStep";
 import MessengerStep from "./steps/MessengerStep";
@@ -10,12 +11,18 @@ interface Props {
   initialMessengerConfigured: boolean;
 }
 
+function hasChosenLanguage(): boolean {
+  try { return localStorage.getItem("nare-lang-chosen") === "1"; } catch { return false; }
+}
+
 export default function SetupWizard({
   initialClaudeConfigured,
   initialMessengerConfigured,
 }: Props) {
   const { t } = useI18n();
   const STEPS = [t("steps.start"), t("steps.ai"), t("steps.messenger"), t("steps.done")];
+
+  const [langChosen, setLangChosen] = useState(hasChosenLanguage);
 
   const initialStep = initialMessengerConfigured ? 3 : initialClaudeConfigured ? 2 : 0;
 
@@ -25,6 +32,17 @@ export default function SetupWizard({
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
+
+  // Show language selection before the wizard starts
+  if (!langChosen) {
+    return (
+      <div className="wizard">
+        <div className="wizard-content">
+          <LanguageStep onSelected={() => setLangChosen(true)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="wizard">

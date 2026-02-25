@@ -165,6 +165,7 @@ export default function App() {
                 fontSize: 13,
               }}
             >
+              <option value="en">English</option>
               <option value="ko">한국어</option>
               <option value="sv">Svenska</option>
             </select>
