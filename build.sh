@@ -71,12 +71,7 @@ check_pkg gdk-3.0           "sudo pacman -S gtk3"
 echo "==> Installing frontend dependencies..."
 npm install
 
-echo "==> Installing bridge dependencies..."
-(cd bridge && npm install)
-
-# ── Prepare bridge (no sidecar — node runs bridge/index.js directly) ─────────
-
-echo "==> Bridge dependencies ready (will be bundled as source)"
+echo "==> Bridge source ready (telegram.js, zero npm deps)"
 
 # ── Build Tauri app ──────────────────────────────────────────────────────────
 
@@ -104,15 +99,10 @@ cp "$BINARY" "$STAGE_DIR/nare"
 strip "$STAGE_DIR/nare" 2>/dev/null || true
 echo "    nare ($(du -h "$STAGE_DIR/nare" | cut -f1))"
 
-# Bridge source + dependencies (node runs these directly)
+# Bridge source (telegram.js — zero npm deps, uses only Node.js built-in https)
 mkdir -p "$STAGE_DIR/bridge"
-cp bridge/index.js bridge/package.json "$STAGE_DIR/bridge/"
-if [ -d bridge/node_modules ]; then
-    cp -r bridge/node_modules "$STAGE_DIR/bridge/node_modules"
-    echo "    bridge/ ($(du -sh "$STAGE_DIR/bridge" | cut -f1))"
-else
-    echo "    bridge/ (deps will be installed on first run)"
-fi
+cp bridge/telegram.js "$STAGE_DIR/bridge/"
+echo "    bridge/telegram.js"
 
 # Icons
 for icon in icon.png 32x32.png; do
@@ -132,7 +122,7 @@ Icon=nare
 Terminal=false
 Type=Application
 Categories=System;Utility;
-Keywords=linux;assistant;ai;whatsapp;notification;
+Keywords=linux;assistant;ai;telegram;notification;
 StartupWMClass=nare
 DESKTOP
 echo "    nare.desktop"
